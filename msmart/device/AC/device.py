@@ -1168,6 +1168,7 @@ class AirConditioner(Device):
             "aux_mode": self.aux_mode,
             "error_code": self.error_code,
             "defrost": self.defrost_active,
+            "outdoor_fan_speed": self.outdoor_fan_speed
         }}
 
     def capabilities_dict(self) -> dict:
