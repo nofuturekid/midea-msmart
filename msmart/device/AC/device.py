@@ -256,10 +256,10 @@ class AirConditioner(Device):
         self._supported_aux_modes = [AirConditioner.AuxHeatMode.OFF]
 
         # Misc
-        self._request_group1_data = False
-        self._request_group2_data = False
+        self._request_group1_data = True
+        self._request_group2_data = True
         self._request_energy_usage = False
-        self._request_group5_data = False
+        self._request_group5_data = True
 
         # Default to assuming device can't handle any properties
         self._supported_properties = set()
