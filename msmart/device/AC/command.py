@@ -496,6 +496,8 @@ class Response():
                     response_class = EnergyUsageResponse
                 elif group == 5:
                     response_class = Group5Response
+                elif group == 7:
+                    response_class = Group7Response
 
             # Validate the payload CRC
             # ...except for properties which certain devices send invalid CRCs
@@ -1200,3 +1202,17 @@ class Group5Response(Response):
         self.outdoor_fan_speed = 8 * payload[8]
 
         self.defrost = bool(payload[10])
+
+class Group7Response(Response):
+    """Group 5 response with humidity, defrost and more."""
+
+    def __init__(self, payload: memoryview) -> None:
+        super().__init__(payload)
+
+        self.outdoor_unit_power = None
+
+        self._parse(payload)
+
+    def _parse(self, payload: memoryview) -> None:
+
+        self.outdoor_unit_power = payload[10] + 255 * payload[11]
