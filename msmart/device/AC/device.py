@@ -12,7 +12,7 @@ from msmart.utils import CapabilityManager, MideaIntEnum, deprecated
 from .command import (CapabilitiesResponse, Command, EnergyUsageResponse,
                       GetCapabilitiesCommand, GetEnergyUsageCommand,
                       GetGroupCommand, GetPropertiesCommand, GetStateCommand,
-                      Group1Response, Group2Response, Group5Response, Group7Response, InvalidResponseException,
+                      Group1Response, Group2Response, Group5Response, Group7Response, Group11Response, InvalidResponseException,
                       PropertiesResponse, PropertyId, Response,
                       SetPropertiesCommand, SetStateCommand, StateResponse,
                       ToggleDisplayCommand)
@@ -225,6 +225,8 @@ class AirConditioner(Device):
         self._TP = None
         self._indoor_fan_speed = None
 
+        self._louver_angle = None
+
         self._total_energy_usage = {
             AirConditioner.EnergyDataFormat.BCD: None,
             AirConditioner.EnergyDataFormat.BINARY: None,
@@ -261,6 +263,7 @@ class AirConditioner(Device):
         self._request_energy_usage = False
         self._request_group5_data = True
         self._request_group7_data = True
+        self._request_group11_data = True
 
         # Default to assuming device can't handle any properties
         self._supported_properties = set()
@@ -413,6 +416,12 @@ class AirConditioner(Device):
                 "Group 7 response payload from device %s: %s", self.id, res)
 
             self._outdoor_unit_power = res.outdoor_unit_power
+
+        elif isinstance(res, Group11Response):
+            _LOGGER.debug(
+                "Group 11 response payload from device %s: %s", self.id, res)
+
+            self._louver_angle = res.louver_angle
 
         else:
             _LOGGER.debug("Ignored unknown response from device %s: %s",
@@ -694,9 +703,13 @@ class AirConditioner(Device):
         if self.supports_humidity or self._request_group5_data:
             commands.append(GetGroupCommand(5))
 
-        # Request Group 6 data if humidity is supported or otherwise enabled
+        # Request Group 7 data
         if self.supports_humidity or self._request_group7_data:
             commands.append(GetGroupCommand(7))
+
+        # Request Group 11 data
+        if self.supports_humidity or self._request_group11_data:
+            commands.append(GetGroupCommand(11))
 
         # Update supported properties
         if len(self._supported_properties):
@@ -1241,6 +1254,10 @@ class AirConditioner(Device):
     def outdoor_unit_power(self) -> Optional[float]:
         return self._outdoor_unit_power
 
+    @property
+    def louver_angle(self) -> Optional[int]:
+        return self._louver_angle
+
     def to_dict(self) -> dict:
         return {**super().to_dict(), **{
             "power": self.power_state,
@@ -1283,7 +1300,8 @@ class AirConditioner(Device):
             "T4": self.T4,
             "TP": self.TP,
             "indoor_fan_speed": self.indoor_fan_speed,
-            "outdoor_unit_power": self.outdoor_unit_power
+            "outdoor_unit_power": self.outdoor_unit_power,
+            "louver_angle": self.louver_angle
         }}
 
     def capabilities_dict(self) -> dict:

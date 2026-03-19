@@ -498,6 +498,8 @@ class Response():
                     response_class = Group5Response
                 elif group == 7:
                     response_class = Group7Response
+                elif group == 11:
+                    response_class = Group11Response
 
             # Validate the payload CRC
             # ...except for properties which certain devices send invalid CRCs
@@ -1058,7 +1060,7 @@ class PropertiesResponse(Response):
         return self._properties.get(id, None)
 
 class Group1Response(Response):
-    """Group 1 response with humidity, defrost and more."""
+    """Group 1 response."""
 
     def __init__(self, payload: memoryview) -> None:
         super().__init__(payload)
@@ -1095,7 +1097,7 @@ class Group1Response(Response):
         self.TP = payload[14] #ucPQTempTab[payload[14]]
 
 class Group2Response(Response):
-    """Group 2 response with humidity, defrost and more."""
+    """Group 2 response."""
 
     def __init__(self, payload: memoryview) -> None:
         super().__init__(payload)
@@ -1204,7 +1206,7 @@ class Group5Response(Response):
         self.defrost = bool(payload[10])
 
 class Group7Response(Response):
-    """Group 5 response with humidity, defrost and more."""
+    """Group 7 response."""
 
     def __init__(self, payload: memoryview) -> None:
         super().__init__(payload)
@@ -1216,3 +1218,17 @@ class Group7Response(Response):
     def _parse(self, payload: memoryview) -> None:
 
         self.outdoor_unit_power = payload[10] + 255 * payload[11]
+
+class Group11Response(Response):
+    """Group 11 response."""
+
+    def __init__(self, payload: memoryview) -> None:
+        super().__init__(payload)
+
+        self.louver_angle = None
+
+        self._parse(payload)
+
+    def _parse(self, payload: memoryview) -> None:
+
+        self.louver_angle = payload[9]
