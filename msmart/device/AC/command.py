@@ -1217,7 +1217,7 @@ class Group7Response(Response):
 
     def _parse(self, payload: memoryview) -> None:
 
-        self.outdoor_unit_power = payload[10] + 255 * payload[11]
+        self.outdoor_unit_power = payload[10] + 256 * payload[11]
 
 class Group11Response(Response):
     """Group 11 response."""
