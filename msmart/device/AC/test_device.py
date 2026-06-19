@@ -103,6 +103,42 @@ class TestUpdateStateFromResponse(unittest.TestCase):
         self.assertEqual(device.fan_speed, AC.FanSpeed.AUTO)
         self.assertEqual(device.swing_mode, AC.SwingMode.VERTICAL)
 
+    def test_timer_properties(self) -> None:
+        """Test the timer property getters/setters and their clamping."""
+        device = AC(0, 0, 0)
+
+        # Default disabled
+        self.assertEqual(device.on_timer, 0)
+        self.assertEqual(device.off_timer, 0)
+
+        device.on_timer = 90
+        device.off_timer = 30
+        self.assertEqual(device.on_timer, 90)
+        self.assertEqual(device.off_timer, 30)
+
+        # Negative values are clamped to 0 (disabled)
+        device.on_timer = -10
+        self.assertEqual(device.on_timer, 0)
+
+        # Values above 24 hours are clamped
+        device.off_timer = 99999
+        self.assertEqual(device.off_timer, 24 * 60)
+
+    def test_timer_state_response(self) -> None:
+        """Test that timer state from a response is reflected on the device."""
+        # Raw state response with power-on 90 min and power-off 30 min timers
+        TEST_RESPONSE = bytearray.fromhex(
+            "c00181668682ff3c0000006156050036000000000000004a")
+
+        with memoryview(bytes(TEST_RESPONSE)) as mv_payload:
+            resp = StateResponse(mv_payload)
+
+        device = AC(0, 0, 0)
+        device._update_state(resp)
+
+        self.assertEqual(device.on_timer, 90)
+        self.assertEqual(device.off_timer, 30)
+
     def test_properties_response(self) -> None:
         """Test parsing of PropertiesResponse into device state."""
         # https://github.com/mill1000/midea-ac-py/issues/60#issuecomment-1936976587
