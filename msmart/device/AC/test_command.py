@@ -140,6 +140,28 @@ class TestSetStateCommand(unittest.TestCase):
         self.assertEqual(body[9], 0x01 | 0x02 | 0x04 | 0x40)
         self.assertEqual(body[10], 0x08 | 0x10 | 0x20)
 
+    def test_tobytes_filter_reset(self) -> None:
+        """Test that filter run-time resets set the correct body bits."""
+        # Common (AC) filter reset -> body byte[10] bit 0x80
+        command = SetStateCommand()
+        command.common_filter_reset = True
+        body = command.tobytes()[10:-1]
+        self.assertEqual(body[10] & 0x80, 0x80)
+        self.assertEqual(body[22] & 0x08, 0x00)
+
+        # Fresh-air filter reset -> body byte[22] bit 0x08
+        command = SetStateCommand()
+        command.fresh_filter_reset = True
+        body = command.tobytes()[10:-1]
+        self.assertEqual(body[22] & 0x08, 0x08)
+        self.assertEqual(body[10] & 0x80, 0x00)
+
+        # Defaults leave both reset bits clear
+        command = SetStateCommand()
+        body = command.tobytes()[10:-1]
+        self.assertEqual(body[10] & 0x80, 0x00)
+        self.assertEqual(body[22] & 0x08, 0x00)
+
 
 class TestStateResponse(_TestResponseBase):
     """Test device state response messages."""

@@ -738,40 +738,8 @@ class AirConditioner(Device):
         for response in await self._send_commands_get_responses(cmd):
             self._update_state(response)
 
-    async def apply(self) -> None:
-        """Apply the local state to the device."""
-
-        # Warn if trying to apply unsupported modes
-        if self._operational_mode not in self.supported_operation_modes:
-            _LOGGER.warning(
-                "Device %s is not capable of operational mode %r.",  self.id, self._operational_mode)
-
-        if (self._fan_speed not in self.supported_fan_speeds
-                and not self.supports_custom_fan_speed):
-            _LOGGER.warning(
-                "Device %s is not capable of fan speed %r.",  self.id, self._fan_speed)
-
-        if self._swing_mode not in self.supported_swing_modes:
-            _LOGGER.warning(
-                "Device %s is not capable of swing mode %r.",  self.id, self._swing_mode)
-
-        if self._turbo and not self.supports_turbo:
-            _LOGGER.warning("Device %s is not capable of turbo mode.", self.id)
-
-        if self._eco and not self.supports_eco:
-            _LOGGER.warning("Device %s is not capable of eco mode.",  self.id)
-
-        if self._freeze_protection and not self.supports_freeze_protection:
-            _LOGGER.warning(
-                "Device %s is not capable of freeze protection.", self.id)
-
-        if self._rate_select != AirConditioner.RateSelect.OFF and self._rate_select not in self.supported_rate_selects:
-            _LOGGER.warning(
-                "Device %s is not capable of rate select %r.",  self.id, self._rate_select)
-
-        if self._aux_mode != AirConditioner.AuxHeatMode.OFF and self._aux_mode not in self.supported_aux_modes:
-            _LOGGER.warning(
-                "Device is not capable of aux mode %r.", self._aux_mode)
+    def _build_set_state_command(self) -> SetStateCommand:
+        """Build a SetStateCommand mirroring the current local device state."""
 
         # Define function to return value or a default if value is None
         def or_default(v, d) -> Any: return v if v is not None else d
@@ -811,6 +779,69 @@ class AirConditioner(Device):
         cmd.anti_cold = or_default(self._anti_cold, False)
         cmd.night_light = or_default(self._night_light, False)
         cmd.pmv = or_default(self._pmv, False)
+
+        return cmd
+
+    async def _reset_filter(self, *, fresh: bool) -> None:
+        """Send a one-shot filter run-time reset, preserving current state."""
+
+        # Build a command from the current state and add the momentary reset
+        # bit so resetting the filter counter does not disturb other settings.
+        cmd = self._build_set_state_command()
+        # Don't toggle the timingIsValid flag for a maintenance action
+        cmd.timer_valid = False
+        if fresh:
+            cmd.fresh_filter_reset = True
+        else:
+            cmd.common_filter_reset = True
+
+        for response in await self._send_commands_get_responses(cmd):
+            self._update_state(response)
+
+    async def reset_filter(self) -> None:
+        """Reset the accumulated run time of the common (AC) filter."""
+        await self._reset_filter(fresh=False)
+
+    async def reset_fresh_air_filter(self) -> None:
+        """Reset the accumulated run time of the fresh-air filter."""
+        await self._reset_filter(fresh=True)
+
+    async def apply(self) -> None:
+        """Apply the local state to the device."""
+
+        # Warn if trying to apply unsupported modes
+        if self._operational_mode not in self.supported_operation_modes:
+            _LOGGER.warning(
+                "Device %s is not capable of operational mode %r.",  self.id, self._operational_mode)
+
+        if (self._fan_speed not in self.supported_fan_speeds
+                and not self.supports_custom_fan_speed):
+            _LOGGER.warning(
+                "Device %s is not capable of fan speed %r.",  self.id, self._fan_speed)
+
+        if self._swing_mode not in self.supported_swing_modes:
+            _LOGGER.warning(
+                "Device %s is not capable of swing mode %r.",  self.id, self._swing_mode)
+
+        if self._turbo and not self.supports_turbo:
+            _LOGGER.warning("Device %s is not capable of turbo mode.", self.id)
+
+        if self._eco and not self.supports_eco:
+            _LOGGER.warning("Device %s is not capable of eco mode.",  self.id)
+
+        if self._freeze_protection and not self.supports_freeze_protection:
+            _LOGGER.warning(
+                "Device %s is not capable of freeze protection.", self.id)
+
+        if self._rate_select != AirConditioner.RateSelect.OFF and self._rate_select not in self.supported_rate_selects:
+            _LOGGER.warning(
+                "Device %s is not capable of rate select %r.",  self.id, self._rate_select)
+
+        if self._aux_mode != AirConditioner.AuxHeatMode.OFF and self._aux_mode not in self.supported_aux_modes:
+            _LOGGER.warning(
+                "Device is not capable of aux mode %r.", self._aux_mode)
+
+        cmd = self._build_set_state_command()
 
         # Process any state responses from the device
         for response in await self._send_commands_get_responses(cmd):

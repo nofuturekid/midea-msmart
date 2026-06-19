@@ -308,6 +308,14 @@ class SetStateCommand(Command):
         self.night_light = False
         self.pmv = False
 
+        # One-shot filter run-time reset flags. These are momentary actions (not
+        # persisted device state) used to clear the accumulated filter run time.
+        # Bits are taken from the device's authoritative jsonToData encoder:
+        #   common (AC) filter -> body byte[10] |= 0x80
+        #   fresh-air filter   -> body byte[22] |= 0x08
+        self.common_filter_reset = False
+        self.fresh_filter_reset = False
+
     @staticmethod
     def _encode_timer(minutes: int) -> tuple[int, int]:
         """Encode a relative countdown timer into its timer byte and sub-15-minute remainder.
@@ -379,8 +387,11 @@ class SetStateCommand(Command):
         # Build freeze protection byte
         freeze_protect = 0x80 if self.freeze_protection else 0
 
-        # Build independent aux heat
+        # Build independent aux heat byte. The fresh-air filter run-time reset
+        # is a momentary action that shares this byte (bit 0x08) per the device
+        # encoder; it is only ever set during an explicit reset action.
         independent_aux_heat = 0x08 if self.independent_aux_heat else 0
+        independent_aux_heat |= 0x08 if self.fresh_filter_reset else 0
 
         # Build relative countdown timer bytes
         on_timer_byte, on_timer_remainder = self._encode_timer(self.on_timer)
@@ -409,6 +420,8 @@ class SetStateCommand(Command):
         byte_10 |= 0x08 if self.anti_cold else 0
         byte_10 |= 0x10 if self.night_light else 0
         byte_10 |= 0x20 if self.pmv else 0
+        # Common (AC) filter run-time reset is a momentary action on bit 0x80.
+        byte_10 |= 0x80 if self.common_filter_reset else 0
 
         return super().tobytes(bytes([
             # Set state
@@ -906,8 +919,15 @@ class CapabilitiesResponse(Response):
 
     @property
     def filter_reminder(self) -> bool:
-        # TODO unsure of difference between filter_notice and filter_clean
-        return self._capabilities.get("filter_notice", False)
+        # The B5 FILTER_REMIND (0x0217) capability reports one of two filter
+        # behaviors (matching the app's praser): value in [1, 2, 4] is a
+        # passive "notice" type, value in [3, 4] is an active "clean" type.
+        # Both surface the same filter dirty/alert status bit (payload[13] &
+        # 0x20), so a device that reports either should expose the entity.
+        # Previously only "notice" was honored, which left "clean"-type units
+        # (value == 3) without a filter sensor.
+        return (self._capabilities.get("filter_notice", False)
+                or self._capabilities.get("filter_clean", False))
 
     @property
     def min_temperature(self) -> int:

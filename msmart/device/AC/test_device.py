@@ -747,6 +747,28 @@ class TestRefresh(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(isinstance(cmd, GetStateCommand)
                             for cmd in commands))
 
+    async def test_reset_filter_commands(self) -> None:
+        """Test that filter resets send a SetStateCommand with the reset bit."""
+
+        from msmart.device.AC.command import SetStateCommand
+
+        for method, byte_idx, mask in (("reset_filter", 10, 0x80),
+                                       ("reset_fresh_air_filter", 22, 0x08)):
+            device = AC(0, 0, 0)
+            with patch("msmart.device.AC.device.AirConditioner._send_commands_get_responses", return_value=[]) as patched_method:
+                await getattr(device, method)()
+
+                patched_method.assert_awaited_once()
+                args, _ = patched_method.call_args
+                cmd = args[0]
+
+                self.assertIsInstance(cmd, SetStateCommand)
+                # A maintenance reset must not assert the timingIsValid flag
+                self.assertFalse(cmd.timer_valid)
+
+                body = cmd.tobytes()[10:-1]
+                self.assertEqual(body[byte_idx] & mask, mask)
+
     async def test_refresh_energy_usage(self) -> None:
         """Test that refresh() sends the GetEnergyUsageCommand when enabled."""
 
