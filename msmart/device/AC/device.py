@@ -131,6 +131,7 @@ class AirConditioner(Device):
 
         # Misc
         CASCADE = auto()
+        FRESH_AIR = auto()
         JET_COOL = auto()
         OUT_SILENT = auto()
         PURIFIER = auto()
@@ -149,6 +150,7 @@ class AirConditioner(Device):
         PropertyId.BREEZE_CONTROL: lambda s: s._breeze_mode,
         PropertyId.BREEZELESS: lambda s: s._breeze_mode == AirConditioner.BreezeMode.BREEZELESS,
         PropertyId.CASCADE: lambda s: s._cascade_mode,
+        PropertyId.FRESH_AIR: lambda s: (s._fresh_air, s._fresh_air_fan_speed),
         PropertyId.IECO: lambda s: s._ieco,
         PropertyId.JET_COOL: lambda s: s._flash_cool,
         PropertyId.OUT_SILENT: lambda s: s._out_silent,
@@ -201,6 +203,26 @@ class AirConditioner(Device):
         self._vertical_swing_angle = AirConditioner.SwingAngle.OFF
         self._cascade_mode = AirConditioner.CascadeMode.OFF
         self._rate_select = AirConditioner.RateSelect.OFF
+        # Fresh air (新风): on/off plus a 0-100 fan speed
+        self._fresh_air = False
+        self._fresh_air_fan_speed = 0
+
+        # Extended classic-protocol toggles (writable via SetStateCommand)
+        self._power_save = False
+        self._low_frequency_fan = False
+        self._cosy_sleep_mode = 0
+        self._comfort_sleep = False
+        self._diy = False
+        self._smart_eye = False
+        self._ventilation = False
+        self._anti_cold = False
+        self._night_light = False
+        self._pmv = False
+        # Read-only extended features (no classic write path)
+        self._cool_wind = None
+        self._natural_wind = None
+        self._child_sleep = None
+        self._water_full = None
         self._breeze_mode = AirConditioner.BreezeMode.OFF
         self._aux_mode = AirConditioner.AuxHeatMode.OFF
 
@@ -320,6 +342,22 @@ class AirConditioner(Device):
             self._on_timer = res.on_timer
             self._off_timer = res.off_timer
 
+            # Extended classic-protocol features
+            self._power_save = res.power_save
+            self._low_frequency_fan = res.low_frequency_fan
+            self._cosy_sleep_mode = res.cosy_sleep_mode
+            self._comfort_sleep = res.comfort_sleep
+            self._diy = res.diy
+            self._smart_eye = res.smart_eye
+            self._ventilation = res.ventilation
+            self._anti_cold = res.anti_cold
+            self._night_light = res.night_light
+            self._pmv = res.pmv
+            self._cool_wind = res.cool_wind
+            self._natural_wind = res.natural_wind
+            self._child_sleep = res.child_sleep
+            self._water_full = res.water_full
+
         elif isinstance(res, PropertiesResponse):
             _LOGGER.debug(
                 "Properties response payload from device %s: %s", self.id, res)
@@ -359,6 +397,9 @@ class AirConditioner(Device):
                 if (value := res.get_property(PropertyId.BREEZELESS)) is not None:
                     self._breeze_mode = (AirConditioner.BreezeMode.BREEZELESS if value
                                          else AirConditioner.BreezeMode.OFF)
+
+            if (value := res.get_property(PropertyId.FRESH_AIR)) is not None:
+                self._fresh_air, self._fresh_air_fan_speed = value
 
             if (value := res.get_property(PropertyId.IECO)) is not None:
                 self._ieco = value
@@ -483,6 +524,9 @@ class AirConditioner(Device):
         self._capabilities.set(AirConditioner.Capability.CASCADE, res.cascade)
 
         self._capabilities.set(
+            AirConditioner.Capability.FRESH_AIR, res.fresh_air)
+
+        self._capabilities.set(
             AirConditioner.Capability.SELF_CLEAN, res.self_clean)
 
         # Add supported rate select levels
@@ -530,6 +574,7 @@ class AirConditioner(Device):
             AirConditioner.Capability.BREEZE_CONTROL: PropertyId.BREEZE_CONTROL,
             AirConditioner.Capability.BREEZELESS: PropertyId.BREEZELESS,
             AirConditioner.Capability.CASCADE: PropertyId.CASCADE,
+            AirConditioner.Capability.FRESH_AIR: PropertyId.FRESH_AIR,
             AirConditioner.Capability.IECO: PropertyId.IECO,
             AirConditioner.Capability.JET_COOL: PropertyId.JET_COOL,
             AirConditioner.Capability.OUT_SILENT: PropertyId.OUT_SILENT,
@@ -754,6 +799,18 @@ class AirConditioner(Device):
         # Only assert timingIsValid when a timer was actually changed, so an
         # unrelated control change does not reset a running countdown.
         cmd.timer_valid = self._timer_dirty
+
+        # Extended classic-protocol toggles
+        cmd.power_save = or_default(self._power_save, False)
+        cmd.low_frequency_fan = or_default(self._low_frequency_fan, False)
+        cmd.cosy_sleep_mode = or_default(self._cosy_sleep_mode, 0)
+        cmd.comfort_sleep = or_default(self._comfort_sleep, False)
+        cmd.diy = or_default(self._diy, False)
+        cmd.smart_eye = or_default(self._smart_eye, False)
+        cmd.ventilation = or_default(self._ventilation, False)
+        cmd.anti_cold = or_default(self._anti_cold, False)
+        cmd.night_light = or_default(self._night_light, False)
+        cmd.pmv = or_default(self._pmv, False)
 
         # Process any state responses from the device
         for response in await self._send_commands_get_responses(cmd):
@@ -1027,6 +1084,131 @@ class AirConditioner(Device):
         self._updated_properties.add(PropertyId.JET_COOL)
 
     @property
+    def supports_fresh_air(self) -> bool:
+        return self._capabilities.has(AirConditioner.Capability.FRESH_AIR)
+
+    @property
+    def fresh_air(self) -> Optional[bool]:
+        return self._fresh_air
+
+    @fresh_air.setter
+    def fresh_air(self, enabled: bool) -> None:
+        self._fresh_air = enabled
+        self._updated_properties.add(PropertyId.FRESH_AIR)
+
+    @property
+    def fresh_air_fan_speed(self) -> int:
+        """Fresh air fan speed as a percentage (0-100)."""
+        return self._fresh_air_fan_speed
+
+    @fresh_air_fan_speed.setter
+    def fresh_air_fan_speed(self, speed: int) -> None:
+        self._fresh_air_fan_speed = max(0, min(100, int(speed)))
+        self._updated_properties.add(PropertyId.FRESH_AIR)
+
+    # Extended classic-protocol toggles. These are applied via the full
+    # SetStateCommand (like eco/turbo), so the setters only update local state.
+    @property
+    def power_save(self) -> Optional[bool]:
+        return self._power_save
+
+    @power_save.setter
+    def power_save(self, enabled: bool) -> None:
+        self._power_save = enabled
+
+    @property
+    def low_frequency_fan(self) -> Optional[bool]:
+        return self._low_frequency_fan
+
+    @low_frequency_fan.setter
+    def low_frequency_fan(self, enabled: bool) -> None:
+        self._low_frequency_fan = enabled
+
+    @property
+    def cosy_sleep_mode(self) -> Optional[int]:
+        """Comfort/cosy sleep curve level (0 = off, 1-3 = curve)."""
+        return self._cosy_sleep_mode
+
+    @cosy_sleep_mode.setter
+    def cosy_sleep_mode(self, level: int) -> None:
+        self._cosy_sleep_mode = max(0, min(3, int(level)))
+
+    @property
+    def comfort_sleep(self) -> Optional[bool]:
+        return self._comfort_sleep
+
+    @comfort_sleep.setter
+    def comfort_sleep(self, enabled: bool) -> None:
+        self._comfort_sleep = enabled
+
+    @property
+    def diy(self) -> Optional[bool]:
+        return self._diy
+
+    @diy.setter
+    def diy(self, enabled: bool) -> None:
+        self._diy = enabled
+
+    @property
+    def smart_eye(self) -> Optional[bool]:
+        return self._smart_eye
+
+    @smart_eye.setter
+    def smart_eye(self, enabled: bool) -> None:
+        self._smart_eye = enabled
+
+    @property
+    def ventilation(self) -> Optional[bool]:
+        """Air exchange / ventilation (换气)."""
+        return self._ventilation
+
+    @ventilation.setter
+    def ventilation(self, enabled: bool) -> None:
+        self._ventilation = enabled
+
+    @property
+    def anti_cold(self) -> Optional[bool]:
+        """Prevent cold draft (防着凉)."""
+        return self._anti_cold
+
+    @anti_cold.setter
+    def anti_cold(self, enabled: bool) -> None:
+        self._anti_cold = enabled
+
+    @property
+    def night_light(self) -> Optional[bool]:
+        return self._night_light
+
+    @night_light.setter
+    def night_light(self, enabled: bool) -> None:
+        self._night_light = enabled
+
+    @property
+    def pmv(self) -> Optional[bool]:
+        return self._pmv
+
+    @pmv.setter
+    def pmv(self, enabled: bool) -> None:
+        self._pmv = enabled
+
+    # Read-only extended features (no classic 0x40 write path on this protocol)
+    @property
+    def cool_wind(self) -> Optional[bool]:
+        return self._cool_wind
+
+    @property
+    def natural_wind(self) -> Optional[bool]:
+        return self._natural_wind
+
+    @property
+    def child_sleep(self) -> Optional[bool]:
+        return self._child_sleep
+
+    @property
+    def water_full(self) -> Optional[bool]:
+        return self._water_full
+
+    @property
     def supports_turbo(self) -> bool:
         return self._capabilities.has(AirConditioner.Capability.TURBO)
 
@@ -1230,6 +1412,22 @@ class AirConditioner(Device):
             "error_code": self.error_code,
             "defrost": self.defrost_active,
             "out_silent": self.out_silent,
+            "fresh_air": self.fresh_air,
+            "fresh_air_fan_speed": self.fresh_air_fan_speed,
+            "power_save": self.power_save,
+            "low_frequency_fan": self.low_frequency_fan,
+            "cosy_sleep_mode": self.cosy_sleep_mode,
+            "comfort_sleep": self.comfort_sleep,
+            "diy": self.diy,
+            "smart_eye": self.smart_eye,
+            "ventilation": self.ventilation,
+            "anti_cold": self.anti_cold,
+            "night_light": self.night_light,
+            "pmv": self.pmv,
+            "cool_wind": self.cool_wind,
+            "natural_wind": self.natural_wind,
+            "child_sleep": self.child_sleep,
+            "water_full": self.water_full,
         }}
 
     def capabilities_dict(self) -> dict:

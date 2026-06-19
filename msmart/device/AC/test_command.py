@@ -116,6 +116,30 @@ class TestSetStateCommand(unittest.TestCase):
         self.assertEqual(body[4], 0x7F)
         self.assertEqual(body[5], 0x7F)
 
+    def test_tobytes_extended_toggles(self) -> None:
+        """Test that extended classic-protocol toggles pack into bytes 8/9/10."""
+        command = SetStateCommand()
+        # Start from a clean slate (defaults set eco/fahrenheit/beep)
+        command.eco = False
+        command.fahrenheit = False
+        command.beep_on = False
+
+        command.power_save = True          # byte 8 bit 3
+        command.low_frequency_fan = True   # byte 8 bit 4
+        command.cosy_sleep_mode = 3        # byte 8 bits 0-1
+        command.smart_eye = True           # byte 9 bit 0
+        command.ventilation = True         # byte 9 bit 1
+        command.diy = True                 # byte 9 bit 2
+        command.comfort_sleep = True       # byte 9 bit 6
+        command.anti_cold = True           # byte 10 bit 3
+        command.night_light = True         # byte 10 bit 4
+        command.pmv = True                 # byte 10 bit 5
+
+        body = command.tobytes()[10:-1]
+        self.assertEqual(body[8], 0x03 | 0x08 | 0x10)
+        self.assertEqual(body[9], 0x01 | 0x02 | 0x04 | 0x40)
+        self.assertEqual(body[10], 0x08 | 0x10 | 0x20)
+
 
 class TestStateResponse(_TestResponseBase):
     """Test device state response messages."""
@@ -144,6 +168,20 @@ class TestStateResponse(_TestResponseBase):
         "error_code",
         "on_timer",
         "off_timer",
+        "power_save",
+        "low_frequency_fan",
+        "cosy_sleep_mode",
+        "comfort_sleep",
+        "diy",
+        "smart_eye",
+        "ventilation",
+        "night_light",
+        "anti_cold",
+        "pmv",
+        "cool_wind",
+        "natural_wind",
+        "child_sleep",
+        "water_full",
     ]
 
     def _test_response(self, msg) -> StateResponse:
@@ -180,6 +218,39 @@ class TestStateResponse(_TestResponseBase):
         resp = self._build_with_timers(BASE, 0x85, 0x7F, 0xD0)
         self.assertEqual(resp.on_timer, 77)
         self.assertEqual(resp.off_timer, 0)
+
+    def test_extended_features(self) -> None:
+        """Test decoding of extended features (bytes 8/9/10/16, per praser0xC0)."""
+        BASE = bytearray.fromhex(
+            "c00181667f7f003c0000006156050036000000000000004a")
+
+        payload = bytearray(BASE)
+        # Byte 8: cosy sleep level 3, power save, low-frequency fan
+        payload[8] = 0x03 | 0x08 | 0x10
+        # Byte 9: child sleep, natural wind, diy, comfort sleep, smart eye
+        payload[9] = 0x01 | 0x02 | 0x04 | 0x40 | 0x80
+        # Byte 10: ventilation, night light, anti-cold, pmv, cool wind
+        payload[10] = 0x08 | 0x10 | 0x20 | 0x40 | 0x80
+        # Byte 16: water tank full error code
+        payload[16] = 38
+
+        with memoryview(bytes(payload)) as mv:
+            resp = cast(StateResponse, StateResponse(mv))
+
+        self.assertEqual(resp.cosy_sleep_mode, 3)
+        self.assertTrue(resp.power_save)
+        self.assertTrue(resp.low_frequency_fan)
+        self.assertTrue(resp.child_sleep)
+        self.assertTrue(resp.natural_wind)
+        self.assertTrue(resp.diy)
+        self.assertTrue(resp.comfort_sleep)
+        self.assertTrue(resp.smart_eye)
+        self.assertTrue(resp.ventilation)
+        self.assertTrue(resp.night_light)
+        self.assertTrue(resp.anti_cold)
+        self.assertTrue(resp.pmv)
+        self.assertTrue(resp.cool_wind)
+        self.assertTrue(resp.water_full)
 
     def test_message_checksum(self) -> None:
         # https://github.com/mill1000/midea-ac-py/issues/11#issuecomment-1650647625
@@ -1144,6 +1215,10 @@ class TestSetPropertiesCommand(unittest.TestCase):
             (PropertyId.CASCADE, 1): bytes([1, 1]),
             (PropertyId.CASCADE, 2): bytes([1, 2]),
 
+            # Fresh air: 3 bytes switch, fan_speed, temp
+            (PropertyId.FRESH_AIR, (True, 60)): bytes([1, 60, 0]),
+            (PropertyId.FRESH_AIR, (False, 0)): bytes([0, 0, 0]),
+
             # Out Silent: 0x03 - On, 0x00 - Off
             (PropertyId.OUT_SILENT, True): bytes([0x03]),
             (PropertyId.OUT_SILENT, False): bytes([0x00]),
@@ -1211,6 +1286,10 @@ class TestPropertiesResponse(_TestResponseBase):
             (PropertyId.CASCADE, bytes([0x00, 0x00])): 0,
             (PropertyId.CASCADE, bytes([0x01, 0x01])): 1,
             (PropertyId.CASCADE, bytes([0x01, 0x02])): 2,
+
+            # Fresh air: 3 bytes switch, fan_speed, temp -> (on, fan_speed)
+            (PropertyId.FRESH_AIR, bytes([0x01, 60, 22])): (True, 60),
+            (PropertyId.FRESH_AIR, bytes([0x00, 0x00, 0x00])): (False, 0),
 
             # Out Silent: 0x03 - On, 0x00 - Off
             (PropertyId.OUT_SILENT, bytes([0x03])): True,
