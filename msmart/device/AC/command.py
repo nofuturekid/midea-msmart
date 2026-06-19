@@ -281,6 +281,12 @@ class SetStateCommand(Command):
         # Relative countdown timers in minutes. 0 disables the timer.
         self.on_timer = 0
         self.off_timer = 0
+        # "timingIsValid" flag (bit 7 of the fan-speed byte). The unit only
+        # applies the on/off timer bytes in a frame when this bit is set. It
+        # must be set whenever the timers are being changed (including cleared),
+        # and left clear otherwise so a running countdown is not reset by an
+        # unrelated control change.
+        self.timer_valid = False
 
     @staticmethod
     def _encode_timer(minutes: int) -> tuple[int, int]:
@@ -369,8 +375,9 @@ class SetStateCommand(Command):
             self.CONTROL_SOURCE | beep | power,
             # Temperature and operational mode
             temperature | mode,
-            # Fan speed
-            self.fan_speed,
+            # Fan speed, with the timingIsValid flag in bit 7. Without this bit
+            # set the unit ignores the on/off timer bytes below.
+            (0x80 if self.timer_valid else 0) | (self.fan_speed & 0x7F),
             # Timer (power-on, power-off, shared sub-15-minute remainder)
             on_timer_byte, off_timer_byte, timer_minutes,
             # Swing mode
