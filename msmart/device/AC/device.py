@@ -313,8 +313,11 @@ class AirConditioner(Device):
 
             self._error_code = res.error_code
 
-            self._on_timer = res.on_timer
-            self._off_timer = res.off_timer
+            # NOTE: The standard state response does not reliably echo the
+            # relative countdown timers (devices observed reporting them as
+            # disabled regardless of the armed timer). Treat the timers as
+            # write-only set-points and do not overwrite the local value here,
+            # otherwise a freshly set timer is immediately clobbered back to 0.
 
         elif isinstance(res, PropertiesResponse):
             _LOGGER.debug(

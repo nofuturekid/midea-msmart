@@ -124,18 +124,25 @@ class TestUpdateStateFromResponse(unittest.TestCase):
         device.off_timer = 99999
         self.assertEqual(device.off_timer, 24 * 60)
 
-    def test_timer_state_response(self) -> None:
-        """Test that timer state from a response is reflected on the device."""
-        # Raw state response with power-on 90 min and power-off 30 min timers
+    def test_timer_state_response_does_not_clobber(self) -> None:
+        """Timers are write-only set-points and must survive a state update.
+
+        The standard state response does not reliably echo the timers, so a
+        locally set timer must not be overwritten when device state refreshes.
+        """
+        # Raw state response (timer bytes report disabled: 7f 7f 00)
         TEST_RESPONSE = bytearray.fromhex(
-            "c00181668682ff3c0000006156050036000000000000004a")
+            "c00181667f7f003c0000006156050036000000000000004a")
+
+        device = AC(0, 0, 0)
+        device.on_timer = 90
+        device.off_timer = 30
 
         with memoryview(bytes(TEST_RESPONSE)) as mv_payload:
             resp = StateResponse(mv_payload)
-
-        device = AC(0, 0, 0)
         device._update_state(resp)
 
+        # Locally set values are retained despite the response reporting disabled
         self.assertEqual(device.on_timer, 90)
         self.assertEqual(device.off_timer, 30)
 
