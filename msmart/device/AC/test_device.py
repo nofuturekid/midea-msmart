@@ -667,6 +667,47 @@ class TestSetState(unittest.TestCase):
         device.fresh_air_fan_speed = 250
         self.assertEqual(device.fresh_air_fan_speed, 100)
 
+    def test_extended_toggles_apply_to_command(self) -> None:
+        """Test extended classic-protocol toggles flow into the SetStateCommand."""
+        device = AC(0, 0, 0)
+
+        device.power_save = True
+        device.low_frequency_fan = True
+        device.cosy_sleep_mode = 9  # clamped to 3
+        device.comfort_sleep = True
+        device.diy = True
+        device.smart_eye = True
+        device.ventilation = True
+        device.anti_cold = True
+        device.night_light = True
+        device.pmv = True
+
+        self.assertEqual(device.cosy_sleep_mode, 3)
+
+        from msmart.device.AC.command import SetStateCommand
+        cmd = SetStateCommand()
+        cmd.eco = False
+        cmd.fahrenheit = False
+        cmd.beep_on = False
+        for attr in ("power_save", "low_frequency_fan", "cosy_sleep_mode",
+                     "comfort_sleep", "diy", "smart_eye", "ventilation",
+                     "anti_cold", "night_light", "pmv"):
+            setattr(cmd, attr, getattr(device, attr))
+
+        body = cmd.tobytes()[10:-1]
+        self.assertEqual(body[8], 0x03 | 0x08 | 0x10)
+        self.assertEqual(body[9], 0x01 | 0x02 | 0x04 | 0x40)
+        self.assertEqual(body[10], 0x08 | 0x10 | 0x20)
+
+    def test_read_only_extended_features(self) -> None:
+        """Read-only extended features expose properties but no setters."""
+        device = AC(0, 0, 0)
+        for attr in ("cool_wind", "natural_wind", "child_sleep", "water_full"):
+            self.assertTrue(hasattr(device, attr))
+            # No setter -> assignment raises
+            with self.assertRaises(AttributeError):
+                setattr(device, attr, True)
+
     def test_properties_out_silent(self) -> None:
         """Test setting out silent property."""
 

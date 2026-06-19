@@ -296,6 +296,18 @@ class SetStateCommand(Command):
         # unrelated control change.
         self.timer_valid = False
 
+        # Extended classic-protocol toggles (bits from composeStandardSet)
+        self.power_save = False
+        self.low_frequency_fan = False
+        self.cosy_sleep_mode = 0
+        self.comfort_sleep = False
+        self.diy = False
+        self.smart_eye = False
+        self.ventilation = False
+        self.anti_cold = False
+        self.night_light = False
+        self.pmv = False
+
     @staticmethod
     def _encode_timer(minutes: int) -> tuple[int, int]:
         """Encode a relative countdown timer into its timer byte and sub-15-minute remainder.
@@ -376,6 +388,28 @@ class SetStateCommand(Command):
         # Shared minutes byte stores the inverted remainder in each nibble
         timer_minutes = ((15 - on_timer_remainder) << 4) | (15 - off_timer_remainder)
 
+        # Byte 8 - follow-me + alt turbo, plus cosy sleep level (bits 0-1),
+        # power save (bit 3) and low-frequency fan (bit 4)
+        byte_8 = follow_me | turbo_alt
+        byte_8 |= self.cosy_sleep_mode & 0x03
+        byte_8 |= 0x08 if self.power_save else 0
+        byte_8 |= 0x10 if self.low_frequency_fan else 0
+
+        # Byte 9 - eco/purifier/aux, plus smart eye (bit 0), ventilation/chgOfAir
+        # (bit 1), diy (bit 2) and comfort sleep switch (bit 6)
+        byte_9 = eco | purifier | force_aux_heat | aux_heat
+        byte_9 |= 0x01 if self.smart_eye else 0
+        byte_9 |= 0x02 if self.ventilation else 0
+        byte_9 |= 0x04 if self.diy else 0
+        byte_9 |= 0x40 if self.comfort_sleep else 0
+
+        # Byte 10 - sleep/turbo/fahrenheit, plus anti-cold (bit 3), night light
+        # (bit 4) and pmv (bit 5). NB: these differ from the status byte[10] bits.
+        byte_10 = sleep | turbo | fahrenheit
+        byte_10 |= 0x08 if self.anti_cold else 0
+        byte_10 |= 0x10 if self.night_light else 0
+        byte_10 |= 0x20 if self.pmv else 0
+
         return super().tobytes(bytes([
             # Set state
             0x40,
@@ -390,12 +424,12 @@ class SetStateCommand(Command):
             on_timer_byte, off_timer_byte, timer_minutes,
             # Swing mode
             swing_mode,
-            # Follow me and alternate turbo mode
-            follow_me | turbo_alt,
-            # ECO mode, purifier/anion, and aux heat
-            eco | purifier | force_aux_heat | aux_heat,
-            # Sleep mode, turbo mode and fahrenheit
-            sleep | turbo | fahrenheit,
+            # Follow me, alt turbo, cosy sleep level, power save, low-freq fan
+            byte_8,
+            # ECO, purifier/anion, aux heat, smart eye, ventilation, diy, comfort sleep
+            byte_9,
+            # Sleep, turbo, fahrenheit, anti-cold, night light, pmv
+            byte_10,
             # Unknown
             0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00,
@@ -944,6 +978,27 @@ class StateResponse(Response):
         self.independent_aux_heat = None
         self.error_code = None
 
+        # Extended classic-protocol features. Bit positions are taken from the
+        # app's authoritative praser0xC0 (the previous commented guesses for
+        # byte[10] were wrong). These are writable via composeStandardSet.
+        self.power_save = None
+        self.low_frequency_fan = None
+        self.cosy_sleep_mode = None
+        self.comfort_sleep = None
+        self.diy = None
+        self.smart_eye = None
+        self.ventilation = None
+        self.night_light = None
+        self.anti_cold = None
+        self.pmv = None
+
+        # Read-only extended features (no classic 0x40 write path on this
+        # protocol - the app only writes them via an extended command).
+        self.cool_wind = None
+        self.natural_wind = None
+        self.child_sleep = None
+        self.water_full = None
+
         # Relative countdown timers in minutes. 0 indicates the timer is disabled.
         self.on_timer = 0
         self.off_timer = 0
@@ -1010,28 +1065,34 @@ class StateResponse(Response):
         # Swing mode
         self.swing_mode = payload[7] & 0xF
 
-        # self.cozy_sleep = payload[8] & 0x03
-        # self.save = (payload[8] & 0x08) > 0
-        # self.low_frequency_fan = (payload[8] & 0x10) > 0
+        # Byte 8: cosy sleep level (0-3), power save, low-frequency fan, turbo,
+        # independent aux heat and follow-me
+        self.cosy_sleep_mode = payload[8] & 0x03
+        self.power_save = bool(payload[8] & 0x08)
+        self.low_frequency_fan = bool(payload[8] & 0x10)
         self.turbo = bool(payload[8] & 0x20)
         self.independent_aux_heat = bool(payload[8] & 0x40)
         self.follow_me = bool(payload[8] & 0x80)
 
+        # Byte 9
+        self.child_sleep = bool(payload[9] & 0x01)
+        self.natural_wind = bool(payload[9] & 0x02)
+        self.diy = bool(payload[9] & 0x04)
+        self.aux_heat = bool(payload[9] & 0x08)
         self.eco = bool(payload[9] & 0x10)
         self.purifier = bool(payload[9] & 0x20)
-        # self.child_sleep = (payload[9] & 0x01) > 0
-        # self.exchange_air = (payload[9] & 0x02) > 0
-        # self.dry_clean = (payload[9] & 0x04) > 0
-        self.aux_heat = bool(payload[9] & 0x08)
-        # self.temp_unit = (payload[9] & 0x80) > 0
+        self.comfort_sleep = bool(payload[9] & 0x40)
+        self.smart_eye = bool(payload[9] & 0x80)  # localBodySense
 
-        self.sleep = bool(payload[10] & 0x1)
-        self.turbo |= bool(payload[10] & 0x2)
-        self.fahrenheit = bool(payload[10] & 0x4)
-        # self.catch_cold = (payload[10] & 0x08) > 0
-        # self.night_light = (payload[10] & 0x10) > 0
-        # self.peak_elec = (payload[10] & 0x20) > 0
-        # self.natural_fan = (payload[10] & 0x40) > 0
+        # Byte 10 (authoritative layout from praser0xC0)
+        self.sleep = bool(payload[10] & 0x01)
+        self.turbo |= bool(payload[10] & 0x02)
+        self.fahrenheit = bool(payload[10] & 0x04)
+        self.ventilation = bool(payload[10] & 0x08)  # chgOfAir
+        self.night_light = bool(payload[10] & 0x10)
+        self.anti_cold = bool(payload[10] & 0x20)  # againstCool
+        self.pmv = bool(payload[10] & 0x40)
+        self.cool_wind = bool(payload[10] & 0x80)  # coolWindMode
 
         # Decode temperatures using additional precision bits
         self.indoor_temperature = self._parse_temperature(
@@ -1051,6 +1112,8 @@ class StateResponse(Response):
         self.display_on = (payload[14] != 0x70)
 
         self.error_code = payload[16]
+        # Water tank full is reported as a specific error code value
+        self.water_full = (payload[16] == 38)
 
         if len(payload) < 20:
             return
