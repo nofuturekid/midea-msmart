@@ -207,6 +207,10 @@ class AirConditioner(Device):
         # Relative countdown timers in minutes. 0 indicates the timer is disabled.
         self._on_timer = 0
         self._off_timer = 0
+        # Set when a timer value is changed so the next apply() asserts the
+        # "timingIsValid" bit. Cleared after the command is sent, matching the
+        # app which only marks timers valid when they are actually modified.
+        self._timer_dirty = False
 
         # Sensors
         self._indoor_temperature = None
@@ -747,10 +751,16 @@ class AirConditioner(Device):
         cmd.independent_aux_heat = self._aux_mode == AirConditioner.AuxHeatMode.AUX_ONLY
         cmd.on_timer = or_default(self._on_timer, 0)
         cmd.off_timer = or_default(self._off_timer, 0)
+        # Only assert timingIsValid when a timer was actually changed, so an
+        # unrelated control change does not reset a running countdown.
+        cmd.timer_valid = self._timer_dirty
 
         # Process any state responses from the device
         for response in await self._send_commands_get_responses(cmd):
             self._update_state(response)
+
+        # Timer change (if any) has now been sent
+        self._timer_dirty = False
 
         # Done if no properties need updating
         if not len(self._updated_properties):
@@ -865,6 +875,7 @@ class AirConditioner(Device):
     def on_timer(self, minutes: int) -> None:
         # Clamp to the representable range (max 24 hours, 0 disables)
         self._on_timer = max(0, min(int(minutes), 24 * 60))
+        self._timer_dirty = True
 
     @property
     def off_timer(self) -> int:
@@ -875,6 +886,7 @@ class AirConditioner(Device):
     def off_timer(self, minutes: int) -> None:
         # Clamp to the representable range (max 24 hours, 0 disables)
         self._off_timer = max(0, min(int(minutes), 24 * 60))
+        self._timer_dirty = True
 
     @property
     def supports_breeze_away(self) -> bool:
