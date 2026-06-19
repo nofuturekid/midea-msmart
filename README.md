@@ -1,7 +1,7 @@
 # msmart-ng
 A Python library for local control of Midea (and associated brands) smart air conditioners. Designed for ease of integration, with async support and minimal dependencies.
 
-[![Code Quality Checks](https://github.com/mill1000/midea-msmart/actions/workflows/checks.yml/badge.svg)](https://github.com/mill1000/midea-msmart/actions/workflows/checks.yml)
+[![Code Quality Checks](https://github.com/gilbertorconde/midea-msmart/actions/workflows/checks.yml/badge.svg)](https://github.com/gilbertorconde/midea-msmart/actions/workflows/checks.yml)
 [![PyPI](https://img.shields.io/pypi/v/msmart-ng?logo=PYPI)](https://pypi.org/project/msmart-ng/)
 
 ## Supported Devices
@@ -16,7 +16,7 @@ This library supports air conditioners from Midea and several associated brands 
 __Note: Only air conditioners (type 0xAC and 0xCC) are supported. See the [usage](#usage) section for how to check compatibility.__ 
 
 ## Note On Cloud Usage
-This library (and its Home Assistant integration [midea-ac-py](https://github.com/mill1000/midea-ac-py)) works locally. No internet connection is required to control your device. 
+This library (and its Home Assistant integration [midea-ac](https://github.com/gilbertorconde/midea-ac)) works locally. No internet connection is required to control your device. 
 
 _However_, for newer "V3" devices, the Midea Cloud is used to acquire a token & key for device authentication. Once retrieved and saved, no further cloud connection is required. Devices are not linked to the library’s built-in accounts and concerned users may supply their own account credentials if they prefer.
 
@@ -139,16 +139,16 @@ $ msmart-ng control <HOST> operational_mode=cool target_temperature=20.5 fan_spe
 **Note:** For CC devices, either the `--auto` argument or the `--device_type` argument must be specified.
 
 ### Home Assistant
-To control your Midea AC units via Home Assistant, use this [midea-ac-py](https://github.com/mill1000/midea-ac-py) fork.
+To control your Midea AC units via Home Assistant, use this [midea-ac](https://github.com/gilbertorconde/midea-ac) fork.
 
 ### Python
 To control devices programmatically, see the included Python [example](example.py).
 
 ## Docker
-A docker image is available on ghcr.io at `ghcr.io/mill1000/msmart-ng`. Ensure the container is run with `--network=host` to allow device discovery on the local network via broadcast.
+A docker image is available on ghcr.io at `ghcr.io/gilbertorconde/msmart-ng`. Ensure the container is run with `--network=host` to allow device discovery on the local network via broadcast.
 
 ```shell
-$ docker run --network=host ghcr.io/mill1000/msmart-ng:latest --help
+$ docker run --network=host ghcr.io/gilbertorconde/msmart-ng:latest --help
 usage: msmart-ng [-h] [-v] {discover,query,control,download} ...
 ```
 

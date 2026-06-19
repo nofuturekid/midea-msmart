@@ -31,8 +31,8 @@ dynamic = ["version"]
 yaml = ["pyyaml"]
 
 [project.urls]
-Repository = "https://github.com/mill1000/midea-msmart"
-Issues = "https://github.com/mill1000/midea-msmart/issues"
+Repository = "https://github.com/gilbertorconde/midea-msmart"
+Issues = "https://github.com/gilbertorconde/midea-msmart/issues"
 
 [project.scripts]
 msmart-ng = "msmart.cli:main"
