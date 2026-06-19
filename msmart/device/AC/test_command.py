@@ -1144,6 +1144,10 @@ class TestSetPropertiesCommand(unittest.TestCase):
             (PropertyId.CASCADE, 1): bytes([1, 1]),
             (PropertyId.CASCADE, 2): bytes([1, 2]),
 
+            # Fresh air: 3 bytes switch, fan_speed, temp
+            (PropertyId.FRESH_AIR, (True, 60)): bytes([1, 60, 0]),
+            (PropertyId.FRESH_AIR, (False, 0)): bytes([0, 0, 0]),
+
             # Out Silent: 0x03 - On, 0x00 - Off
             (PropertyId.OUT_SILENT, True): bytes([0x03]),
             (PropertyId.OUT_SILENT, False): bytes([0x00]),
@@ -1211,6 +1215,10 @@ class TestPropertiesResponse(_TestResponseBase):
             (PropertyId.CASCADE, bytes([0x00, 0x00])): 0,
             (PropertyId.CASCADE, bytes([0x01, 0x01])): 1,
             (PropertyId.CASCADE, bytes([0x01, 0x02])): 2,
+
+            # Fresh air: 3 bytes switch, fan_speed, temp -> (on, fan_speed)
+            (PropertyId.FRESH_AIR, bytes([0x01, 60, 22])): (True, 60),
+            (PropertyId.FRESH_AIR, bytes([0x00, 0x00, 0x00])): (False, 0),
 
             # Out Silent: 0x03 - On, 0x00 - Off
             (PropertyId.OUT_SILENT, bytes([0x03])): True,

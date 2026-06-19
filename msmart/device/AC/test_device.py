@@ -642,6 +642,31 @@ class TestSetState(unittest.TestCase):
         # Assert correct property is being updated
         self.assertIn(PropertyId.CASCADE, device._updated_properties)
 
+    def test_properties_fresh_air(self) -> None:
+        """Test setting fresh air property."""
+
+        # Create dummy device with fresh air
+        device = AC(0, 0, 0)
+        device._capabilities.set(AC.Capability.FRESH_AIR)
+        self.assertTrue(device.supports_fresh_air)
+
+        # Enable fresh air and set a fan speed
+        device.fresh_air = True
+        device.fresh_air_fan_speed = 70
+
+        # Assert state is expected
+        self.assertEqual(device.fresh_air, True)
+        self.assertEqual(device.fresh_air_fan_speed, 70)
+
+        # Assert correct property is being updated and packs as (on, speed)
+        self.assertIn(PropertyId.FRESH_AIR, device._updated_properties)
+        self.assertEqual(device._PROPERTY_MAP[PropertyId.FRESH_AIR](device),
+                         (True, 70))
+
+        # Fan speed is clamped to 0-100
+        device.fresh_air_fan_speed = 250
+        self.assertEqual(device.fresh_air_fan_speed, 100)
+
     def test_properties_out_silent(self) -> None:
         """Test setting out silent property."""
 
