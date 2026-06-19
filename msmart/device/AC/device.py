@@ -204,6 +204,10 @@ class AirConditioner(Device):
         self._breeze_mode = AirConditioner.BreezeMode.OFF
         self._aux_mode = AirConditioner.AuxHeatMode.OFF
 
+        # Relative countdown timers in minutes. 0 indicates the timer is disabled.
+        self._on_timer = 0
+        self._off_timer = 0
+
         # Sensors
         self._indoor_temperature = None
         self._indoor_humidity = None
@@ -308,6 +312,9 @@ class AirConditioner(Device):
                 self._aux_mode = AirConditioner.AuxHeatMode.OFF
 
             self._error_code = res.error_code
+
+            self._on_timer = res.on_timer
+            self._off_timer = res.off_timer
 
         elif isinstance(res, PropertiesResponse):
             _LOGGER.debug(
@@ -738,6 +745,8 @@ class AirConditioner(Device):
         cmd.target_humidity = or_default(self._target_humidity, 40)
         cmd.aux_heat = self._aux_mode == AirConditioner.AuxHeatMode.AUX_HEAT
         cmd.independent_aux_heat = self._aux_mode == AirConditioner.AuxHeatMode.AUX_ONLY
+        cmd.on_timer = or_default(self._on_timer, 0)
+        cmd.off_timer = or_default(self._off_timer, 0)
 
         # Process any state responses from the device
         for response in await self._send_commands_get_responses(cmd):
@@ -846,6 +855,26 @@ class AirConditioner(Device):
             speed = int(speed)
 
         self._fan_speed = speed
+
+    @property
+    def on_timer(self) -> int:
+        """Relative power-on countdown timer in minutes. 0 indicates disabled."""
+        return self._on_timer
+
+    @on_timer.setter
+    def on_timer(self, minutes: int) -> None:
+        # Clamp to the representable range (max 24 hours, 0 disables)
+        self._on_timer = max(0, min(int(minutes), 24 * 60))
+
+    @property
+    def off_timer(self) -> int:
+        """Relative power-off countdown timer in minutes. 0 indicates disabled."""
+        return self._off_timer
+
+    @off_timer.setter
+    def off_timer(self, minutes: int) -> None:
+        # Clamp to the representable range (max 24 hours, 0 disables)
+        self._off_timer = max(0, min(int(minutes), 24 * 60))
 
     @property
     def supports_breeze_away(self) -> bool:

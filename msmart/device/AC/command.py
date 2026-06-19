@@ -278,6 +278,33 @@ class SetStateCommand(Command):
         self.force_aux_heat = False
         self.independent_aux_heat = False
 
+        # Relative countdown timers in minutes. 0 disables the timer.
+        self.on_timer = 0
+        self.off_timer = 0
+
+    @staticmethod
+    def _encode_timer(minutes: int) -> tuple[int, int]:
+        """Encode a relative countdown timer into its timer byte and sub-15-minute remainder.
+
+        Returns a tuple of (timer_byte, remainder_minutes). A value of 0 (or less)
+        disables the timer (0x7F) and yields a 0 remainder. The remainder (0-14) is
+        the minute part not captured by the quarter-hour step, and is used to build
+        the shared minutes byte.
+        """
+        if minutes <= 0:
+            return 0x7F, 0
+
+        # Hours use a 5-bit field, so clamp to the maximum representable value
+        minutes = min(minutes, 24 * 60)
+
+        hours = minutes // 60
+        step = (minutes % 60) // 15  # Quarter hours, 0-3
+        remainder = (minutes % 60) % 15  # 0-14
+
+        # Bit 7 enables the timer, bits 2-6 hold the hours, bits 0-1 the quarter hours
+        timer_byte = 0x80 | (hours << 2) | step
+        return timer_byte, remainder
+
     def tobytes(self) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
         # Build beep and power status bytes
         beep = 0x40 if self.beep_on else 0
@@ -329,6 +356,12 @@ class SetStateCommand(Command):
         # Build independent aux heat
         independent_aux_heat = 0x08 if self.independent_aux_heat else 0
 
+        # Build relative countdown timer bytes
+        on_timer_byte, on_timer_remainder = self._encode_timer(self.on_timer)
+        off_timer_byte, off_timer_remainder = self._encode_timer(self.off_timer)
+        # Shared minutes byte stores the inverted remainder in each nibble
+        timer_minutes = ((15 - on_timer_remainder) << 4) | (15 - off_timer_remainder)
+
         return super().tobytes(bytes([
             # Set state
             0x40,
@@ -338,8 +371,8 @@ class SetStateCommand(Command):
             temperature | mode,
             # Fan speed
             self.fan_speed,
-            # Timer
-            0x7F, 0x7F, 0x00,
+            # Timer (power-on, power-off, shared sub-15-minute remainder)
+            on_timer_byte, off_timer_byte, timer_minutes,
             # Swing mode
             swing_mode,
             # Follow me and alternate turbo mode
@@ -891,7 +924,28 @@ class StateResponse(Response):
         self.independent_aux_heat = None
         self.error_code = None
 
+        # Relative countdown timers in minutes. 0 indicates the timer is disabled.
+        self.on_timer = 0
+        self.off_timer = 0
+
         self._parse(payload)
+
+    @staticmethod
+    def _decode_timer(timer_byte: int, remainder: int) -> int:
+        """Decode a timer byte and its sub-15-minute remainder into minutes.
+
+        Returns 0 when the timer is disabled (enable bit not set). Inverse of
+        SetStateCommand._encode_timer.
+        """
+        # Bit 7 indicates whether the timer is enabled
+        if not (timer_byte & 0x80):
+            return 0
+
+        hours = (timer_byte & 0x7C) >> 2
+        step = timer_byte & 0x3  # Quarter hours, 0-3
+        minutes = 15 - (remainder & 0xF)  # Inverted remainder, 0-14
+
+        return hours * 60 + step * 15 + minutes
 
     def _parse_temperature(self, data: int, decimals: float, fahrenheit: bool) -> Optional[float]:
         """Parse a temperature value from the payload using additional precision bits as needed."""
@@ -928,21 +982,10 @@ class StateResponse(Response):
         # On my unit, Low == 40 (LED < 40), Med == 60 (LED < 60), High == 100 (LED < 100)
         self.fan_speed = payload[3] & 0x7F
 
-        # on_timer_value = payload[4]
-        # on_timer_minutes = payload[6]
-        # self.on_timer = {
-        #     'status': ((on_timer_value & 0x80) >> 7) > 0,
-        #     'hour': (on_timer_value & 0x7c) >> 2,
-        #     'minutes': (on_timer_value & 0x3) | ((on_timer_minutes & 0xf0) >> 4)
-        # }
-
-        # off_timer_value = payload[5]
-        # off_timer_minutes = payload[6]
-        # self.off_timer = {
-        #     'status': ((off_timer_value & 0x80) >> 7) > 0,
-        #     'hour': (off_timer_value & 0x7c) >> 2,
-        #     'minutes': (off_timer_value & 0x3) | (off_timer_minutes & 0xf)
-        # }
+        # Relative countdown timers. The shared minutes byte stores the inverted
+        # power-on remainder in the high nibble and power-off remainder in the low nibble.
+        self.on_timer = self._decode_timer(payload[4], (payload[6] & 0xF0) >> 4)
+        self.off_timer = self._decode_timer(payload[5], payload[6] & 0xF)
 
         # Swing mode
         self.swing_mode = payload[7] & 0xF
