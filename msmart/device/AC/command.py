@@ -396,9 +396,11 @@ class SetStateCommand(Command):
 
         # Build relative countdown timer bytes
         on_timer_byte, on_timer_remainder = self._encode_timer(self.on_timer)
-        off_timer_byte, off_timer_remainder = self._encode_timer(self.off_timer)
+        off_timer_byte, off_timer_remainder = self._encode_timer(
+            self.off_timer)
         # Shared minutes byte stores the inverted remainder in each nibble
-        timer_minutes = ((15 - on_timer_remainder) << 4) | (15 - off_timer_remainder)
+        timer_minutes = ((15 - on_timer_remainder) <<
+                         4) | (15 - off_timer_remainder)
 
         # Byte 8 - follow-me + alt turbo, plus cosy sleep level (bits 0-1),
         # power save (bit 3) and low-frequency fan (bit 4)
@@ -1092,7 +1094,8 @@ class StateResponse(Response):
 
         # Relative countdown timers. The shared minutes byte stores the inverted
         # power-on remainder in the high nibble and power-off remainder in the low nibble.
-        self.on_timer = self._decode_timer(payload[4], (payload[6] & 0xF0) >> 4)
+        self.on_timer = self._decode_timer(
+            payload[4], (payload[6] & 0xF0) >> 4)
         self.off_timer = self._decode_timer(payload[5], payload[6] & 0xF)
 
         # Swing mode
@@ -1221,6 +1224,7 @@ class PropertiesResponse(Response):
     def get_property(self, id: PropertyId) -> Optional[Any]:
         return self._properties.get(id, None)
 
+
 class Group1Response(Response):
     """Group 1 response."""
 
@@ -1228,11 +1232,11 @@ class Group1Response(Response):
         super().__init__(payload)
 
         self.compressor_frequency = None
-        #self.indoor_fan_frequency = None
-        #self.compressor_current = None
+        # self.indoor_fan_frequency = None
+        # self.compressor_current = None
         self.outdoor_unit_total_current = None
         self.outdoor_unit_voltage = None
-        #self.indoor_unit_operating_mode = None
+        # self.indoor_unit_operating_mode = None
         self.T1 = None
         self.T2 = None
         self.T3 = None
@@ -1244,19 +1248,20 @@ class Group1Response(Response):
     def _parse(self, payload: memoryview) -> None:
 
         self.compressor_frequency = payload[4]
-        #self.indoor_fan_frequency = payload[5]
-        #self.compressor_current = payload[6]
+        # self.indoor_fan_frequency = payload[5]
+        # self.compressor_current = payload[6]
         self.outdoor_unit_total_current = payload[7]
         self.outdoor_unit_voltage = payload[8]
-        #self.indoor_unit_operating_mode = payload[9]
+        # self.indoor_unit_operating_mode = payload[9]
 
         self.T1 = (payload[10] - 30) / 2
         self.T2 = (payload[11] - 30) / 2
         self.T3 = (payload[12] - 50) / 2
         self.T4 = (payload[13] - 50) / 2
 
-        #ucPQTempTab = [-48,-48,-33,-25,-20,-16,-13,-10,-7,-4,-2,0,2,3,5,6,8,9,11,12,13,14,15,16,17,18,19,20,21,22,23,24,24,25,26,27,27,28,29,30,30,31,32,32,33,34,34,35,36,36,37,37,38,39,39,40,40,41,41,42,42,43,44,44,45,45,46,46,47,47,48,48,49,49,50,50,51,51,52,52,53,53,54,54,55,55,56,56,56,57,57,58,58,59,59,60,60,61,61,62,62,63,63,63,64,64,65,65,66,66,67,67,68,68,69,69,69,70,70,71,71,72,72,73,73,74,74,75,75,76,76,76,77,77,78,78,79,79,80,80,81,81,82,82,83,83,84,84,85,85,86,86,87,87,88,88,89,90,90,91,91,92,92,93,93,94,95,95,96,96,97,98,98,99,99,100,101,101,102,103,103,104,105,105,106,107,107,108,109,109,110,111,112,112,113,114,115,116,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,135,136,137,138,140,141,142,144,145,147,148,150,152,153,155,157,159,161,163,165,168,170,173,175,178,181,185,188,192,196,201,206,211,218,225,233,243,254,255,255,255,255,255]
-        self.TP = payload[14] #ucPQTempTab[payload[14]]
+        # ucPQTempTab = [-48,-48,-33,-25,-20,-16,-13,-10,-7,-4,-2,0,2,3,5,6,8,9,11,12,13,14,15,16,17,18,19,20,21,22,23,24,24,25,26,27,27,28,29,30,30,31,32,32,33,34,34,35,36,36,37,37,38,39,39,40,40,41,41,42,42,43,44,44,45,45,46,46,47,47,48,48,49,49,50,50,51,51,52,52,53,53,54,54,55,55,56,56,56,57,57,58,58,59,59,60,60,61,61,62,62,63,63,63,64,64,65,65,66,66,67,67,68,68,69,69,69,70,70,71,71,72,72,73,73,74,74,75,75,76,76,76,77,77,78,78,79,79,80,80,81,81,82,82,83,83,84,84,85,85,86,86,87,87,88,88,89,90,90,91,91,92,92,93,93,94,95,95,96,96,97,98,98,99,99,100,101,101,102,103,103,104,105,105,106,107,107,108,109,109,110,111,112,112,113,114,115,116,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,135,136,137,138,140,141,142,144,145,147,148,150,152,153,155,157,159,161,163,165,168,170,173,175,178,181,185,188,192,196,201,206,211,218,225,233,243,254,255,255,255,255,255]
+        self.TP = payload[14]  # ucPQTempTab[payload[14]]
+
 
 class Group2Response(Response):
     """Group 2 response."""
@@ -1264,15 +1269,16 @@ class Group2Response(Response):
     def __init__(self, payload: memoryview) -> None:
         super().__init__(payload)
 
-        #self.indoor_target_fan_speed = None
+        # self.indoor_target_fan_speed = None
         self.indoor_fan_speed = None
 
         self._parse(payload)
 
     def _parse(self, payload: memoryview) -> None:
 
-        #self.indoor_target_fan_speed = payload[4] * 8
+        # self.indoor_target_fan_speed = payload[4] * 8
         self.indoor_fan_speed = payload[5] * 8
+
 
 class EnergyUsageResponse(Response):
     """Response to a GetEnergyUsageCommand."""
@@ -1367,6 +1373,7 @@ class Group5Response(Response):
 
         self.defrost = bool(payload[10])
 
+
 class Group7Response(Response):
     """Group 7 response."""
 
@@ -1380,6 +1387,7 @@ class Group7Response(Response):
     def _parse(self, payload: memoryview) -> None:
 
         self.outdoor_unit_power = payload[10] + 256 * payload[11]
+
 
 class Group11Response(Response):
     """Group 11 response."""

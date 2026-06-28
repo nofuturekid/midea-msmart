@@ -2,18 +2,10 @@ import logging
 import unittest
 from unittest.mock import patch
 
-from .command import (
-    CapabilitiesResponse,
-    EnergyUsageResponse,
-    GetEnergyUsageCommand,
-    GetGroupCommand,
-    GetPropertiesCommand,
-    GetStateCommand,
-    Group5Response,
-    PropertiesResponse,
-    Response,
-    StateResponse,
-)
+from .command import (CapabilitiesResponse, EnergyUsageResponse,
+                      GetEnergyUsageCommand, GetGroupCommand,
+                      GetPropertiesCommand, GetStateCommand, Group5Response,
+                      PropertiesResponse, Response, StateResponse)
 from .device import AirConditioner as AC
 from .device import PropertyId
 
@@ -224,7 +216,8 @@ class TestUpdateStateFromResponse(unittest.TestCase):
     def test_properties_missing_field(self) -> None:
         """Test parsing of PropertiesResponse that only contains some properties."""
         # https://github.com/mill1000/midea-msmart/issues/97#issuecomment-1949495900
-        TEST_RESPONSE = bytes.fromhex("aa13ac00000000000303b1010a0000013200c884")
+        TEST_RESPONSE = bytes.fromhex(
+            "aa13ac00000000000303b1010a0000013200c884")
 
         # Create a dummy device
         device = AC(0, 0, 0)
@@ -324,10 +317,12 @@ class TestUpdateStateFromResponse(unittest.TestCase):
                 device.get_total_energy_usage(AC.EnergyDataFormat.BCD), total
             )
             self.assertEqual(
-                device.get_current_energy_usage(AC.EnergyDataFormat.BCD), current
+                device.get_current_energy_usage(
+                    AC.EnergyDataFormat.BCD), current
             )
             self.assertEqual(
-                device.get_real_time_power_usage(AC.EnergyDataFormat.BCD), real_time
+                device.get_real_time_power_usage(
+                    AC.EnergyDataFormat.BCD), real_time
             )
 
     def test_binary_energy_usage_response(self) -> None:
@@ -360,13 +355,16 @@ class TestUpdateStateFromResponse(unittest.TestCase):
 
             # Assert state is expected
             self.assertEqual(
-                device.get_total_energy_usage(AC.EnergyDataFormat.BINARY), total
+                device.get_total_energy_usage(
+                    AC.EnergyDataFormat.BINARY), total
             )
             self.assertEqual(
-                device.get_current_energy_usage(AC.EnergyDataFormat.BINARY), current
+                device.get_current_energy_usage(
+                    AC.EnergyDataFormat.BINARY), current
             )
             self.assertEqual(
-                device.get_real_time_power_usage(AC.EnergyDataFormat.BINARY), real_time
+                device.get_real_time_power_usage(
+                    AC.EnergyDataFormat.BINARY), real_time
             )
 
     def test_humidity_response(self) -> None:
@@ -749,7 +747,8 @@ class TestSetState(unittest.TestCase):
 
         # Assert correct property is being updated and packs as (on, speed)
         self.assertIn(PropertyId.FRESH_AIR, device._updated_properties)
-        self.assertEqual(device._PROPERTY_MAP[PropertyId.FRESH_AIR](device), (True, 70))
+        self.assertEqual(
+            device._PROPERTY_MAP[PropertyId.FRESH_AIR](device), (True, 70))
 
         # Fan speed is clamped to 0-100
         device.fresh_air_fan_speed = 250
@@ -845,7 +844,8 @@ class TestRefresh(unittest.IsolatedAsyncioTestCase):
             args, kwargs = patched_method.call_args
             commands = args[0]
 
-            self.assertTrue(any(isinstance(cmd, GetStateCommand) for cmd in commands))
+            self.assertTrue(any(isinstance(cmd, GetStateCommand)
+                            for cmd in commands))
 
     async def test_reset_filter_commands(self) -> None:
         """Test that filter resets send a SetStateCommand with the reset bit."""
@@ -1186,11 +1186,13 @@ class TestSendCommandGetResponse(unittest.IsolatedAsyncioTestCase):
                 await device.get_capabilities()
 
                 self.assertRegex(
-                    "\n".join(log.output), "Failed to query capabilities from device.*"
+                    "\n".join(
+                        log.output), "Failed to query capabilities from device.*"
                 )
 
                 self.assertRegex(
-                    "\n".join(log.output), "Ignored response of type.*from device.*"
+                    "\n".join(
+                        log.output), "Ignored response of type.*from device.*"
                 )
 
             # Assert patch method was awaited
@@ -1231,7 +1233,8 @@ class TestDeprecation(unittest.TestCase):
             device.use_alternate_energy_format = True
 
             self.assertRegex(
-                "\n".join(log.output), "'use_alternate_energy_format' is deprecated."
+                "\n".join(
+                    log.output), "'use_alternate_energy_format' is deprecated."
             )
 
 
@@ -1413,7 +1416,8 @@ class TestCapabilityOverrides(unittest.TestCase):
         self.assertEqual(device.supports_vertical_swing_angle, False)
         self.assertEqual(device.supports_flash_cool, False)
 
-        self.assertNotIn(PropertyId.SWING_UD_ANGLE, device._supported_properties)
+        self.assertNotIn(PropertyId.SWING_UD_ANGLE,
+                         device._supported_properties)
         self.assertNotIn(PropertyId.JET_COOL, device._supported_properties)
 
         # Override capabilities
@@ -1431,7 +1435,8 @@ class TestCapabilityOverrides(unittest.TestCase):
         self.assertEqual(device.supports_breeze_mild, False)
         self.assertEqual(device.supports_breezeless, False)
 
-        self.assertNotIn(PropertyId.BREEZE_CONTROL, device._supported_properties)
+        self.assertNotIn(PropertyId.BREEZE_CONTROL,
+                         device._supported_properties)
 
     def test_merging(self) -> None:
         """Test merging capabilities."""
@@ -1463,8 +1468,10 @@ class TestCapabilityOverrides(unittest.TestCase):
         device.override_capabilities(TEST_OVERRIDE, merge=True)
 
         # Assert merged capability match expected
-        self.assertCountEqual(device.supported_swing_modes, EXPECTED_SWING_MODES)
-        self.assertCountEqual(device.supported_operation_modes, EXPECTED_OP_MODES)
+        self.assertCountEqual(
+            device.supported_swing_modes, EXPECTED_SWING_MODES)
+        self.assertCountEqual(
+            device.supported_operation_modes, EXPECTED_OP_MODES)
 
 
 if __name__ == "__main__":
