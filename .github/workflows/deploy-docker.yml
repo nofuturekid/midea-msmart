@@ -17,7 +17,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: gilbertorconde/msmart-ng
+  IMAGE_NAME: nofuturekid/msmart-ng
   PLATFORMS: linux/amd64,linux/arm64,linux/arm/v7
 
 jobs:
