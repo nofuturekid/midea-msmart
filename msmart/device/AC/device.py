@@ -257,6 +257,8 @@ class AirConditioner(Device):
         self._outdoor_fan_speed = None
 
         self._compressor_frequency = None
+        self._indoor_fan_frequency = None
+        self._compressor_current = None
         self._outdoor_unit_total_current = None
         self._outdoor_unit_voltage = None
         self._T1 = None
@@ -463,6 +465,8 @@ class AirConditioner(Device):
                 "Group 1 response payload from device %s: %s", self.id, res)
 
             self._compressor_frequency = res.compressor_frequency
+            self._indoor_fan_frequency = res.indoor_fan_frequency
+            self._compressor_current = res.compressor_current
             self._outdoor_unit_total_current = res.outdoor_unit_total_current
             self._outdoor_unit_voltage = res.outdoor_unit_voltage
             self._T1 = res.T1
@@ -1603,6 +1607,14 @@ class AirConditioner(Device):
         return self._compressor_frequency
 
     @property
+    def indoor_fan_frequency(self) -> Optional[int]:
+        return self._indoor_fan_frequency
+
+    @property
+    def compressor_current(self) -> Optional[int]:
+        return self._compressor_current
+
+    @property
     def outdoor_unit_total_current(self) -> Optional[int]:
         return self._outdoor_unit_total_current
 
@@ -1695,6 +1707,8 @@ class AirConditioner(Device):
                 "water_full": self.water_full,
                 "outdoor_fan_speed": self.outdoor_fan_speed,
                 "compressor_frequency": self.compressor_frequency,
+                "indoor_fan_frequency": self.indoor_fan_frequency,
+                "compressor_current": self.compressor_current,
                 "outdoor_unit_total_current": self.outdoor_unit_total_current,
                 "outdoor_unit_voltage": self.outdoor_unit_voltage,
                 "T1": self.T1,

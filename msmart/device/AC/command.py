@@ -1583,8 +1583,8 @@ class Group1Response(Response):
         super().__init__(payload)
 
         self.compressor_frequency = None
-        # self.indoor_fan_frequency = None
-        # self.compressor_current = None
+        self.indoor_fan_frequency = None
+        self.compressor_current = None
         self.outdoor_unit_total_current = None
         self.outdoor_unit_voltage = None
         # self.indoor_unit_operating_mode = None
@@ -1599,8 +1599,8 @@ class Group1Response(Response):
     def _parse(self, payload: memoryview) -> None:
 
         self.compressor_frequency = payload[4]
-        # self.indoor_fan_frequency = payload[5]
-        # self.compressor_current = payload[6]
+        self.indoor_fan_frequency = payload[5]
+        self.compressor_current = payload[6]
         self.outdoor_unit_total_current = payload[7]
         self.outdoor_unit_voltage = payload[8]
         # self.indoor_unit_operating_mode = payload[9]
