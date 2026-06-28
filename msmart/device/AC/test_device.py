@@ -2,10 +2,18 @@ import logging
 import unittest
 from unittest.mock import patch
 
-from .command import (CapabilitiesResponse, EnergyUsageResponse,
-                      GetEnergyUsageCommand, GetGroup5Command,
-                      GetPropertiesCommand, GetStateCommand, Group5Response,
-                      PropertiesResponse, Response, StateResponse)
+from .command import (
+    CapabilitiesResponse,
+    EnergyUsageResponse,
+    GetEnergyUsageCommand,
+    GetGroupCommand,
+    GetPropertiesCommand,
+    GetStateCommand,
+    Group5Response,
+    PropertiesResponse,
+    Response,
+    StateResponse,
+)
 from .device import AirConditioner as AC
 from .device import PropertyId
 
@@ -57,9 +65,15 @@ class TestDeviceEnums(unittest.TestCase):
     def test_device_enums(self) -> None:
         """Test AuxHeatMode enum conversion from value/name."""
 
-        ENUM_CLASSES = [AC.AuxHeatMode, AC.BreezeMode,
-                        AC.FanSpeed, AC.OperationalMode,
-                        AC.RateSelect, AC.SwingAngle, AC.SwingMode]
+        ENUM_CLASSES = [
+            AC.AuxHeatMode,
+            AC.BreezeMode,
+            AC.FanSpeed,
+            AC.OperationalMode,
+            AC.RateSelect,
+            AC.SwingAngle,
+            AC.SwingMode,
+        ]
 
         for enum_cls in ENUM_CLASSES:
             # Test conversion to/from enum members
@@ -77,7 +91,8 @@ class TestUpdateStateFromResponse(unittest.TestCase):
 
         # V3 state response
         TEST_RESPONSE = bytes.fromhex(
-            "aa23ac00000000000303c00145660000003c0010045c6b20000000000000000000020d79")
+            "aa23ac00000000000303c00145660000003c0010045c6b20000000000000000000020d79"
+        )
 
         resp = Response.construct(TEST_RESPONSE)
         self.assertIsNotNone(resp)
@@ -128,7 +143,8 @@ class TestUpdateStateFromResponse(unittest.TestCase):
         """Test that timer state from a response is reflected on the device."""
         # Raw state response with power-on 90 min and power-off 30 min timers
         TEST_RESPONSE = bytearray.fromhex(
-            "c00181668682ff3c0000006156050036000000000000004a")
+            "c00181668682ff3c0000006156050036000000000000004a"
+        )
 
         with memoryview(bytes(TEST_RESPONSE)) as mv_payload:
             resp = StateResponse(mv_payload)
@@ -143,7 +159,8 @@ class TestUpdateStateFromResponse(unittest.TestCase):
         """Test parsing of PropertiesResponse into device state."""
         # https://github.com/mill1000/midea-ac-py/issues/60#issuecomment-1936976587
         TEST_RESPONSE = bytes.fromhex(
-            "aa21ac00000000000303b10409000001000a00000100150000012b1e020000005fa3")
+            "aa21ac00000000000303b10409000001000a00000100150000012b1e020000005fa3"
+        )
 
         # Create a dummy device
         device = AC(0, 0, 0)
@@ -156,8 +173,9 @@ class TestUpdateStateFromResponse(unittest.TestCase):
         with self.assertLogs("msmart", logging.WARNING) as log:
             resp = Response.construct(TEST_RESPONSE)
 
-            self.assertRegex("\n".join(log.output),
-                             "Unsupported property .*INDOOR_HUMIDITY.*")
+            self.assertRegex(
+                "\n".join(log.output), "Unsupported property .*INDOOR_HUMIDITY.*"
+            )
 
         # Assert response is a state response
         self.assertIsNotNone(resp)
@@ -174,7 +192,8 @@ class TestUpdateStateFromResponse(unittest.TestCase):
         """Test parsing of PropertiesResponse from SetProperties command into device state."""
         # https://github.com/mill1000/midea-msmart/issues/97#issuecomment-1949495900
         TEST_RESPONSE = bytes.fromhex(
-            "aa18ac00000000000302b0020a0000013209001101000089a4")
+            "aa18ac00000000000302b0020a0000013209001101000089a4"
+        )
 
         # Create a dummy device
         device = AC(0, 0, 0)
@@ -189,7 +208,8 @@ class TestUpdateStateFromResponse(unittest.TestCase):
             self.assertIsNotNone(resp)
 
             self.assertRegex(
-                log.output[0], "Property .*SWING_UD_ANGLE.* failed, Result: 0x11.")
+                log.output[0], "Property .*SWING_UD_ANGLE.* failed, Result: 0x11."
+            )
 
         # Assert response is a state response
         self.assertEqual(type(resp), PropertiesResponse)
@@ -204,8 +224,7 @@ class TestUpdateStateFromResponse(unittest.TestCase):
     def test_properties_missing_field(self) -> None:
         """Test parsing of PropertiesResponse that only contains some properties."""
         # https://github.com/mill1000/midea-msmart/issues/97#issuecomment-1949495900
-        TEST_RESPONSE = bytes.fromhex(
-            "aa13ac00000000000303b1010a0000013200c884")
+        TEST_RESPONSE = bytes.fromhex("aa13ac00000000000303b1010a0000013200c884")
 
         # Create a dummy device
         device = AC(0, 0, 0)
@@ -235,17 +254,25 @@ class TestUpdateStateFromResponse(unittest.TestCase):
         TEST_RESPONSES = {
             # https://github.com/mill1000/midea-msmart/issues/150#issuecomment-2264720231
             # Breezeless device in Breeze Away mode
-            bytes.fromhex("aa1cac00000000000303b103430000010218000001004200000000cf0e"): (True, False, False),
-
+            bytes.fromhex(
+                "aa1cac00000000000303b103430000010218000001004200000000cf0e"
+            ): (True, False, False),
             # https://github.com/mill1000/midea-msmart/issues/150#issuecomment-2262226032
             # Non-breezeless device in Breeze Away mode
-            bytes.fromhex("aa1bac00000000000303b1034300000018000000420000010200914e"): (True, False, False),
-
+            bytes.fromhex("aa1bac00000000000303b1034300000018000000420000010200914e"): (
+                True,
+                False,
+                False,
+            ),
             # https://github.com/mill1000/midea-msmart/issues/150#issuecomment-2262221251
             # Breezeless device in Breeze Mild mode
-            bytes.fromhex("aa1cac00000000000303b1034300000103180000010042000000001ac2"): (False, True, False),
+            bytes.fromhex(
+                "aa1cac00000000000303b1034300000103180000010042000000001ac2"
+            ): (False, True, False),
             # Breezeless device in Breezeless mode
-            bytes.fromhex("aa1cac00000000000303b10343000001041800000101420000000034a6"): (False, False, True),
+            bytes.fromhex(
+                "aa1cac00000000000303b10343000001041800000101420000000034a6"
+            ): (False, False, True),
         }
 
         for response, state in TEST_RESPONSES.items():
@@ -270,10 +297,13 @@ class TestUpdateStateFromResponse(unittest.TestCase):
         """Test parsing of EnergyUsageResponses into device state."""
         TEST_RESPONSES = {
             # https://github.com/mill1000/midea-msmart/pull/116#issuecomment-2191412432
-            (5650.02, 1514.0, 0): bytes.fromhex("aa20ac00000000000203c121014400564a02640000000014ae0000000000041a22"),
-
+            (5650.02, 1514.0, 0): bytes.fromhex(
+                "aa20ac00000000000203c121014400564a02640000000014ae0000000000041a22"
+            ),
             # https://github.com/mill1000/midea-msmart/pull/116#issuecomment-2218753545
-            (None, None, None): bytes.fromhex("aa20ac00000000000303c1210144000000000000000000000000000000000843bc"),
+            (None, None, None): bytes.fromhex(
+                "aa20ac00000000000303c1210144000000000000000000000000000000000843bc"
+            ),
         }
 
         for power, response in TEST_RESPONSES.items():
@@ -290,21 +320,27 @@ class TestUpdateStateFromResponse(unittest.TestCase):
             total, current, real_time = power
 
             # Assert state is expected
-            self.assertEqual(device.get_total_energy_usage(
-                AC.EnergyDataFormat.BCD), total)
-            self.assertEqual(device.get_current_energy_usage(
-                AC.EnergyDataFormat.BCD), current)
-            self.assertEqual(device.get_real_time_power_usage(
-                AC.EnergyDataFormat.BCD), real_time)
+            self.assertEqual(
+                device.get_total_energy_usage(AC.EnergyDataFormat.BCD), total
+            )
+            self.assertEqual(
+                device.get_current_energy_usage(AC.EnergyDataFormat.BCD), current
+            )
+            self.assertEqual(
+                device.get_real_time_power_usage(AC.EnergyDataFormat.BCD), real_time
+            )
 
     def test_binary_energy_usage_response(self) -> None:
         """Test parsing of EnergyUsageResponses into device state with binary format."""
         TEST_RESPONSES = {
             # https://github.com/mill1000/midea-ac-py/issues/204#issuecomment-2314705021
-            (150.4, .6, 279.5): bytes.fromhex("aa22ac00000000000803c1210144000005e00000000000000006000aeb000000487a5e"),
-
+            (150.4, 0.6, 279.5): bytes.fromhex(
+                "aa22ac00000000000803c1210144000005e00000000000000006000aeb000000487a5e"
+            ),
             # https://github.com/mill1000/midea-msmart/pull/116#issuecomment-2218753545
-            (None, None, None): bytes.fromhex("aa20ac00000000000303c1210144000000000000000000000000000000000843bc"),
+            (None, None, None): bytes.fromhex(
+                "aa20ac00000000000303c1210144000000000000000000000000000000000843bc"
+            ),
         }
 
         for power, response in TEST_RESPONSES.items():
@@ -323,23 +359,29 @@ class TestUpdateStateFromResponse(unittest.TestCase):
             total, current, real_time = power
 
             # Assert state is expected
-            self.assertEqual(device.get_total_energy_usage(
-                AC.EnergyDataFormat.BINARY), total)
-            self.assertEqual(device.get_current_energy_usage(
-                AC.EnergyDataFormat.BINARY), current)
-            self.assertEqual(device.get_real_time_power_usage(
-                AC.EnergyDataFormat.BINARY), real_time)
+            self.assertEqual(
+                device.get_total_energy_usage(AC.EnergyDataFormat.BINARY), total
+            )
+            self.assertEqual(
+                device.get_current_energy_usage(AC.EnergyDataFormat.BINARY), current
+            )
+            self.assertEqual(
+                device.get_real_time_power_usage(AC.EnergyDataFormat.BINARY), real_time
+            )
 
     def test_humidity_response(self) -> None:
         """Test parsing of humidity data in Group5Response into device state."""
         TEST_RESPONSES = {
             # Device supports humidity
             # https://github.com/mill1000/midea-msmart/pull/116#issuecomment-2218019069
-            63: bytes.fromhex("aa20ac00000000000303c12101453f546c005d0a000000de1f0000ba9a0004af9c"),
-
+            63: bytes.fromhex(
+                "aa20ac00000000000303c12101453f546c005d0a000000de1f0000ba9a0004af9c"
+            ),
             # Device does not support humidity
             # https://github.com/mill1000/midea-msmart/pull/116#issuecomment-2192724566
-            None: bytes.fromhex("aa1fac00000000000303c1210145000000000000000000000000000000001aed"),
+            None: bytes.fromhex(
+                "aa1fac00000000000303c1210145000000000000000000000000000000001aed"
+            ),
         }
 
         for humidity, response in TEST_RESPONSES.items():
@@ -365,41 +407,60 @@ class TestCapabilities(unittest.TestCase):
         # Device with numerous supported features
         # https://github.com/mill1000/midea-msmart/issues/150#issuecomment-2276158338
         CAPABILITIES_PAYLOAD_0 = bytes.fromhex(
-            "b50a12020101430001011402010115020101160201001a020101100201011f020103250207203c203c203c05400001000100")
+            "b50a12020101430001011402010115020101160201001a020101100201011f020103250207203c203c203c05400001000100"
+        )
         CAPABILITIES_PAYLOAD_1 = bytes.fromhex(
-            "b5051e020101130201012202010019020100390001010000")
+            "b5051e020101130201012202010019020100390001010000"
+        )
 
         # Create a dummy device and process the response
         device = AC(0, 0, 0)
 
         # Parse capability payloads
-        with memoryview(CAPABILITIES_PAYLOAD_0) as payload0, memoryview(CAPABILITIES_PAYLOAD_1) as payload1:
+        with (
+            memoryview(CAPABILITIES_PAYLOAD_0) as payload0,
+            memoryview(CAPABILITIES_PAYLOAD_1) as payload1,
+        ):
             resp0 = CapabilitiesResponse(payload0)
             resp1 = CapabilitiesResponse(payload1)
 
             resp0.merge(resp1)
             device._update_capabilities(resp0)
 
-        self.assertCountEqual(device.supported_operation_modes, [AC.OperationalMode.AUTO,
-                                                                 AC.OperationalMode.COOL,
-                                                                 AC.OperationalMode.DRY,
-                                                                 AC.OperationalMode.FAN_ONLY,
-                                                                 AC.OperationalMode.HEAT,
-                                                                 AC.OperationalMode.SMART_DRY])
+        self.assertCountEqual(
+            device.supported_operation_modes,
+            [
+                AC.OperationalMode.AUTO,
+                AC.OperationalMode.COOL,
+                AC.OperationalMode.DRY,
+                AC.OperationalMode.FAN_ONLY,
+                AC.OperationalMode.HEAT,
+                AC.OperationalMode.SMART_DRY,
+            ],
+        )
 
-        self.assertCountEqual(device.supported_swing_modes, [AC.SwingMode.OFF,
-                                                             AC.SwingMode.BOTH,
-                                                             AC.SwingMode.HORIZONTAL,
-                                                             AC.SwingMode.VERTICAL])
+        self.assertCountEqual(
+            device.supported_swing_modes,
+            [
+                AC.SwingMode.OFF,
+                AC.SwingMode.BOTH,
+                AC.SwingMode.HORIZONTAL,
+                AC.SwingMode.VERTICAL,
+            ],
+        )
 
         self.assertEqual(device.supports_custom_fan_speed, True)
-        self.assertCountEqual(device.supported_fan_speeds, [AC.FanSpeed.SILENT,
-                                                            AC.FanSpeed.LOW,
-                                                            AC.FanSpeed.MEDIUM,
-                                                            AC.FanSpeed.HIGH,
-                                                            AC.FanSpeed.MAX,  # Supports custom
-                                                            AC.FanSpeed.AUTO,
-                                                            ])
+        self.assertCountEqual(
+            device.supported_fan_speeds,
+            [
+                AC.FanSpeed.SILENT,
+                AC.FanSpeed.LOW,
+                AC.FanSpeed.MEDIUM,
+                AC.FanSpeed.HIGH,
+                AC.FanSpeed.MAX,  # Supports custom
+                AC.FanSpeed.AUTO,
+            ],
+        )
 
         self.assertEqual(device.supports_humidity, True)
         self.assertEqual(device.supports_target_humidity, True)
@@ -415,25 +476,30 @@ class TestCapabilities(unittest.TestCase):
         """Test rate select device capability."""
         # https://github.com/mill1000/midea-msmart/issues/148#issuecomment-2273549806
         CAPABILITIES_PAYLOAD_0 = bytes.fromhex(
-            "b50a1202010114020101150201001e020101170201021a02010110020101250207203c203c203c0024020101480001010101")
+            "b50a1202010114020101150201001e020101170201021a02010110020101250207203c203c203c0024020101480001010101"
+        )
         CAPABILITIES_PAYLOAD_1 = bytes.fromhex(
-            "b5071f0201002c020101160201043900010151000101e3000101130201010002")
+            "b5071f0201002c020101160201043900010151000101e3000101130201010002"
+        )
 
         # Create a dummy device and process the response
         device = AC(0, 0, 0)
 
         # Parse capability payloads
-        with memoryview(CAPABILITIES_PAYLOAD_0) as payload0, memoryview(CAPABILITIES_PAYLOAD_1) as payload1:
+        with (
+            memoryview(CAPABILITIES_PAYLOAD_0) as payload0,
+            memoryview(CAPABILITIES_PAYLOAD_1) as payload1,
+        ):
             resp0 = CapabilitiesResponse(payload0)
             resp1 = CapabilitiesResponse(payload1)
 
             resp0.merge(resp1)
             device._update_capabilities(resp0)
 
-        self.assertCountEqual(device.supported_rate_selects, [AC.RateSelect.OFF,
-                                                              AC.RateSelect.GEAR_75,
-                                                              AC.RateSelect.GEAR_50
-                                                              ])
+        self.assertCountEqual(
+            device.supported_rate_selects,
+            [AC.RateSelect.OFF, AC.RateSelect.GEAR_75, AC.RateSelect.GEAR_50],
+        )
 
         # TODO find device with 5 levels of rate select
 
@@ -442,15 +508,20 @@ class TestCapabilities(unittest.TestCase):
         # "Modern" breezeless device with "breeze control" i.e. breeze away, breeze mild and breezeless.
         # https://github.com/mill1000/midea-msmart/issues/150#issuecomment-2276158338
         CAPABILITIES_PAYLOAD_0 = bytes.fromhex(
-            "b50a12020101430001011402010115020101160201001a020101100201011f020103250207203c203c203c05400001000100")
+            "b50a12020101430001011402010115020101160201001a020101100201011f020103250207203c203c203c05400001000100"
+        )
         CAPABILITIES_PAYLOAD_1 = bytes.fromhex(
-            "b5051e020101130201012202010019020100390001010000")
+            "b5051e020101130201012202010019020100390001010000"
+        )
 
         # Create a dummy device and process the response
         device = AC(0, 0, 0)
 
         # Parse capability payloads
-        with memoryview(CAPABILITIES_PAYLOAD_0) as payload0, memoryview(CAPABILITIES_PAYLOAD_1) as payload1:
+        with (
+            memoryview(CAPABILITIES_PAYLOAD_0) as payload0,
+            memoryview(CAPABILITIES_PAYLOAD_1) as payload1,
+        ):
             resp0 = CapabilitiesResponse(payload0)
             resp1 = CapabilitiesResponse(payload1)
 
@@ -464,12 +535,17 @@ class TestCapabilities(unittest.TestCase):
         # Device with only breeze away
         # https://github.com/mill1000/midea-msmart/issues/150#issuecomment-2259796473
         CAPABILITIES_PAYLOAD_0 = bytes.fromhex(
-            "b50912020101180001001402010115020101160201001a020101100201011f020103250207203c203c203c050100")
+            "b50912020101180001001402010115020101160201001a020101100201011f020103250207203c203c203c050100"
+        )
         CAPABILITIES_PAYLOAD_1 = bytes.fromhex(
-            "b5091e0201011302010122020100190201003900010142000101090001010a000101300001010000")
+            "b5091e0201011302010122020100190201003900010142000101090001010a000101300001010000"
+        )
 
         # Parse capability payloads
-        with memoryview(CAPABILITIES_PAYLOAD_0) as payload0, memoryview(CAPABILITIES_PAYLOAD_1) as payload1:
+        with (
+            memoryview(CAPABILITIES_PAYLOAD_0) as payload0,
+            memoryview(CAPABILITIES_PAYLOAD_1) as payload1,
+        ):
             resp0 = CapabilitiesResponse(payload0)
             resp1 = CapabilitiesResponse(payload1)
 
@@ -483,12 +559,17 @@ class TestCapabilities(unittest.TestCase):
         # "Legacy" breezeless device with only breezeless.
         # https://github.com/mill1000/midea-ac-py/issues/186#issuecomment-2249023972
         CAPABILITIES_PAYLOAD_0 = bytes.fromhex(
-            "b50912020101180001011402010115020101160201001a020101100201011f020103250207203c203c203c050100")
+            "b50912020101180001011402010115020101160201001a020101100201011f020103250207203c203c203c050100"
+        )
         CAPABILITIES_PAYLOAD_1 = bytes.fromhex(
-            "b5041e0201011302010122020100190201000000")
+            "b5041e0201011302010122020100190201000000"
+        )
 
         # Parse capability payloads
-        with memoryview(CAPABILITIES_PAYLOAD_0) as payload0, memoryview(CAPABILITIES_PAYLOAD_1) as payload1:
+        with (
+            memoryview(CAPABILITIES_PAYLOAD_0) as payload0,
+            memoryview(CAPABILITIES_PAYLOAD_1) as payload1,
+        ):
             resp0 = CapabilitiesResponse(payload0)
             resp1 = CapabilitiesResponse(payload1)
 
@@ -504,28 +585,36 @@ class TestCapabilities(unittest.TestCase):
 
         # https://github.com/mill1000/midea-ac-py/issues/297#issuecomment-2622720960
         CAPABILITIES_PAYLOAD_0 = bytes.fromhex(
-            "b50514020109150201021a020101250207203c203c203c00340201010100")
+            "b50514020109150201021a020101250207203c203c203c00340201010100"
+        )
         CAPABILITIES_PAYLOAD_1 = bytes.fromhex(
-            "b508100201051f0201003000010013020100190201013900010093000101940001010000")
+            "b508100201051f0201003000010013020100190201013900010093000101940001010000"
+        )
 
         # Create a dummy device and process the response
         device = AC(0, 0, 0)
 
         # Parse capability payloads
-        with memoryview(CAPABILITIES_PAYLOAD_0) as payload0, memoryview(CAPABILITIES_PAYLOAD_1) as payload1:
+        with (
+            memoryview(CAPABILITIES_PAYLOAD_0) as payload0,
+            memoryview(CAPABILITIES_PAYLOAD_1) as payload1,
+        ):
             resp0 = CapabilitiesResponse(payload0)
             resp1 = CapabilitiesResponse(payload1)
 
             resp0.merge(resp1)
             device._update_capabilities(resp0)
 
-        self.assertEqual(device.supported_aux_modes, [
-                         AC.AuxHeatMode.OFF, AC.AuxHeatMode.AUX_HEAT, AC.AuxHeatMode.AUX_ONLY])
+        self.assertEqual(
+            device.supported_aux_modes,
+            [AC.AuxHeatMode.OFF, AC.AuxHeatMode.AUX_HEAT, AC.AuxHeatMode.AUX_ONLY],
+        )
 
     def test_out_silent(self) -> None:
         """Test out silent capability."""
         CAPABILITIES_PAYLOAD_0 = bytes.fromhex(
-            "b5081f0201002c020101160201043900010151000101e300010113020101cd000103000236")
+            "b5081f0201002c020101160201043900010151000101e300010113020101cd000103000236"
+        )
 
         # Create a dummy device and process the response
         device = AC(0, 0, 0)
@@ -660,8 +749,7 @@ class TestSetState(unittest.TestCase):
 
         # Assert correct property is being updated and packs as (on, speed)
         self.assertIn(PropertyId.FRESH_AIR, device._updated_properties)
-        self.assertEqual(device._PROPERTY_MAP[PropertyId.FRESH_AIR](device),
-                         (True, 70))
+        self.assertEqual(device._PROPERTY_MAP[PropertyId.FRESH_AIR](device), (True, 70))
 
         # Fan speed is clamped to 0-100
         device.fresh_air_fan_speed = 250
@@ -685,13 +773,23 @@ class TestSetState(unittest.TestCase):
         self.assertEqual(device.cosy_sleep_mode, 3)
 
         from msmart.device.AC.command import SetStateCommand
+
         cmd = SetStateCommand()
         cmd.eco = False
         cmd.fahrenheit = False
         cmd.beep_on = False
-        for attr in ("power_save", "low_frequency_fan", "cosy_sleep_mode",
-                     "comfort_sleep", "diy", "smart_eye", "ventilation",
-                     "anti_cold", "night_light", "pmv"):
+        for attr in (
+            "power_save",
+            "low_frequency_fan",
+            "cosy_sleep_mode",
+            "comfort_sleep",
+            "diy",
+            "smart_eye",
+            "ventilation",
+            "anti_cold",
+            "night_light",
+            "pmv",
+        ):
             setattr(cmd, attr, getattr(device, attr))
 
         body = cmd.tobytes()[10:-1]
@@ -734,7 +832,10 @@ class TestRefresh(unittest.IsolatedAsyncioTestCase):
         device = AC(0, 0, 0)
 
         # Patch _send_commands_get_responses so we can inspect the commands sent
-        with patch("msmart.device.AC.device.AirConditioner._send_commands_get_responses", return_value=[]) as patched_method:
+        with patch(
+            "msmart.device.AC.device.AirConditioner._send_commands_get_responses",
+            return_value=[],
+        ) as patched_method:
             await device.refresh()
 
             # Assert patched method was awaited
@@ -744,18 +845,22 @@ class TestRefresh(unittest.IsolatedAsyncioTestCase):
             args, kwargs = patched_method.call_args
             commands = args[0]
 
-            self.assertTrue(any(isinstance(cmd, GetStateCommand)
-                            for cmd in commands))
+            self.assertTrue(any(isinstance(cmd, GetStateCommand) for cmd in commands))
 
     async def test_reset_filter_commands(self) -> None:
         """Test that filter resets send a SetStateCommand with the reset bit."""
 
         from msmart.device.AC.command import SetStateCommand
 
-        for method, byte_idx, mask in (("reset_filter", 10, 0x80),
-                                       ("reset_fresh_air_filter", 22, 0x08)):
+        for method, byte_idx, mask in (
+            ("reset_filter", 10, 0x80),
+            ("reset_fresh_air_filter", 22, 0x08),
+        ):
             device = AC(0, 0, 0)
-            with patch("msmart.device.AC.device.AirConditioner._send_commands_get_responses", return_value=[]) as patched_method:
+            with patch(
+                "msmart.device.AC.device.AirConditioner._send_commands_get_responses",
+                return_value=[],
+            ) as patched_method:
                 await getattr(device, method)()
 
                 patched_method.assert_awaited_once()
@@ -777,7 +882,10 @@ class TestRefresh(unittest.IsolatedAsyncioTestCase):
         device.enable_energy_usage_requests = True
 
         # Patch _send_commands_get_responses so we can inspect the commands sent
-        with patch("msmart.device.AC.device.AirConditioner._send_commands_get_responses", return_value=[]) as patched_method:
+        with patch(
+            "msmart.device.AC.device.AirConditioner._send_commands_get_responses",
+            return_value=[],
+        ) as patched_method:
             await device.refresh()
 
             # Assert patched method was awaited
@@ -787,18 +895,22 @@ class TestRefresh(unittest.IsolatedAsyncioTestCase):
             args, kwargs = patched_method.call_args
             commands = args[0]
 
-            self.assertTrue(any(isinstance(cmd, GetEnergyUsageCommand)
-                            for cmd in commands))
+            self.assertTrue(
+                any(isinstance(cmd, GetEnergyUsageCommand) for cmd in commands)
+            )
 
     async def test_refresh_group5_humidity(self) -> None:
-        """Test that refresh() sends the GetGroup5Command when humidity is supported."""
+        """Test that refresh() sends the GetGroupCommand for group 5 when humidity is supported."""
 
         # Create dummy device
         device = AC(0, 0, 0)
         device._capabilities.set(AC.Capability.HUMIDITY)
 
         # Patch _send_commands_get_responses so we can inspect the commands sent
-        with patch("msmart.device.AC.device.AirConditioner._send_commands_get_responses", return_value=[]) as patched_method:
+        with patch(
+            "msmart.device.AC.device.AirConditioner._send_commands_get_responses",
+            return_value=[],
+        ) as patched_method:
             await device.refresh()
 
             # Assert patched method was awaited
@@ -808,18 +920,25 @@ class TestRefresh(unittest.IsolatedAsyncioTestCase):
             args, kwargs = patched_method.call_args
             commands = args[0]
 
-            self.assertTrue(any(isinstance(cmd, GetGroup5Command)
-                            for cmd in commands))
+            self.assertTrue(
+                any(
+                    isinstance(cmd, GetGroupCommand) and cmd._group == 5
+                    for cmd in commands
+                )
+            )
 
     async def test_refresh_group5_enabled(self) -> None:
-        """Test that refresh() sends the GetGroup5Command when enabled."""
+        """Test that refresh() sends the GetGroupCommand for group 5 when enabled."""
 
         # Create dummy device
         device = AC(0, 0, 0)
         device.enable_group5_data_requests = True
 
         # Patch _send_commands_get_responses so we can inspect the commands sent
-        with patch("msmart.device.AC.device.AirConditioner._send_commands_get_responses", return_value=[]) as patched_method:
+        with patch(
+            "msmart.device.AC.device.AirConditioner._send_commands_get_responses",
+            return_value=[],
+        ) as patched_method:
             await device.refresh()
 
             # Assert patched method was awaited
@@ -829,8 +948,12 @@ class TestRefresh(unittest.IsolatedAsyncioTestCase):
             args, kwargs = patched_method.call_args
             commands = args[0]
 
-            self.assertTrue(any(isinstance(cmd, GetGroup5Command)
-                            for cmd in commands))
+            self.assertTrue(
+                any(
+                    isinstance(cmd, GetGroupCommand) and cmd._group == 5
+                    for cmd in commands
+                )
+            )
 
     async def test_refresh_properties(self) -> None:
         """Test that refresh() sends the GetPropertiesCommand when supported properties are present."""
@@ -840,7 +963,10 @@ class TestRefresh(unittest.IsolatedAsyncioTestCase):
         device._supported_properties.add(PropertyId.BREEZE_CONTROL)
 
         # Patch _send_commands_get_responses so we can inspect the commands sent
-        with patch("msmart.device.AC.device.AirConditioner._send_commands_get_responses", return_value=[]) as patched_method:
+        with patch(
+            "msmart.device.AC.device.AirConditioner._send_commands_get_responses",
+            return_value=[],
+        ) as patched_method:
             await device.refresh()
 
             # Assert patched method was awaited
@@ -850,8 +976,9 @@ class TestRefresh(unittest.IsolatedAsyncioTestCase):
             args, kwargs = patched_method.call_args
             commands = args[0]
 
-            self.assertTrue(any(isinstance(cmd, GetPropertiesCommand)
-                            for cmd in commands))
+            self.assertTrue(
+                any(isinstance(cmd, GetPropertiesCommand) for cmd in commands)
+            )
 
 
 class TestSendCommandGetResponse(unittest.IsolatedAsyncioTestCase):
@@ -868,7 +995,9 @@ class TestSendCommandGetResponse(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(device.online, True)
 
         # Patch _send_command to return no responses
-        with patch("msmart.base_device.Device._send_command", return_value=[]) as patched_method:
+        with patch(
+            "msmart.base_device.Device._send_command", return_value=[]
+        ) as patched_method:
 
             # Refresh device
             await device.refresh()
@@ -882,7 +1011,8 @@ class TestSendCommandGetResponse(unittest.IsolatedAsyncioTestCase):
     async def test_refresh_valid_response(self) -> None:
         """Test that a refresh() with any valid response marks a device as online and supported."""
         TEST_RESPONSE = bytes.fromhex(
-            "aa23ac00000000000303c00145660000003c0010045c6b20000000000000000000020d79")
+            "aa23ac00000000000303c00145660000003c0010045c6b20000000000000000000020d79"
+        )
 
         # Create a dummy device
         device = AC(0, 0, 0)
@@ -892,7 +1022,9 @@ class TestSendCommandGetResponse(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(device.supported, False)
 
         # Patch _send_command to return a valid state response
-        with patch("msmart.base_device.Device._send_command", return_value=[TEST_RESPONSE]) as patched_method:
+        with patch(
+            "msmart.base_device.Device._send_command", return_value=[TEST_RESPONSE]
+        ) as patched_method:
 
             # Refresh device
             await device.refresh()
@@ -907,7 +1039,8 @@ class TestSendCommandGetResponse(unittest.IsolatedAsyncioTestCase):
     async def test_refresh_one_response(self) -> None:
         """Test that a refresh() with only one response stays online."""
         TEST_RESPONSE = bytes.fromhex(
-            "aa23ac00000000000303c00145660000003c0010045c6b20000000000000000000020d79")
+            "aa23ac00000000000303c00145660000003c0010045c6b20000000000000000000020d79"
+        )
 
         # Create a dummy device
         device = AC(0, 0, 0)
@@ -929,17 +1062,26 @@ class TestSendCommandGetResponse(unittest.IsolatedAsyncioTestCase):
                 return []
 
         # Patch _send_command to return test responses
-        with patch("msmart.base_device.Device._send_command", new=_get_responses_sometimes):
+        with patch(
+            "msmart.base_device.Device._send_command", new=_get_responses_sometimes
+        ):
 
             # Force additional features so refresh() sends multiple requests are sent
             device._request_energy_usage = True
             device._capabilities.set(AC.Capability.HUMIDITY)
 
+            # Isolate from the merged-in group polling: disable the group 1/2 requests
+            # TurboLed enables by default. A humidity-capable device still polls
+            # groups 5/7/11 (these are gated on supports_humidity).
+            device._request_group1_data = False
+            device._request_group2_data = False
+
             # Refresh device
             await device.refresh()
 
-        # Assert expected number of packets was sent
-        self.assertEqual(packet_count, 3)
+        # Assert expected number of packets was sent:
+        # state + energy + group5 + group7 + group11
+        self.assertEqual(packet_count, 5)
 
         # Assert device is still online
         self.assertEqual(device.online, True)
@@ -948,7 +1090,8 @@ class TestSendCommandGetResponse(unittest.IsolatedAsyncioTestCase):
     async def test_refresh_supported_sticky(self) -> None:
         """Test that once set, the supported property remains true if the device doesn't respond."""
         TEST_RESPONSE = bytes.fromhex(
-            "aa23ac00000000000303c00145660000003c0010045c6b20000000000000000000020d79")
+            "aa23ac00000000000303c00145660000003c0010045c6b20000000000000000000020d79"
+        )
 
         # Create a dummy device
         device = AC(0, 0, 0)
@@ -958,7 +1101,9 @@ class TestSendCommandGetResponse(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(device.supported, False)
 
         # Patch _send_command to return response
-        with patch("msmart.base_device.Device._send_command", return_value=[TEST_RESPONSE]) as patched_method:
+        with patch(
+            "msmart.base_device.Device._send_command", return_value=[TEST_RESPONSE]
+        ) as patched_method:
 
             # Refresh device
             await device.refresh()
@@ -971,7 +1116,9 @@ class TestSendCommandGetResponse(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(device.supported, True)
 
         # Patch _send_command to return no response
-        with patch("msmart.base_device.Device._send_command", return_value=[]) as patched_method:
+        with patch(
+            "msmart.base_device.Device._send_command", return_value=[]
+        ) as patched_method:
 
             # Refresh device again
             await device.refresh()
@@ -987,7 +1134,8 @@ class TestSendCommandGetResponse(unittest.IsolatedAsyncioTestCase):
         """Test that a refresh() with a response from the wrong device type marks a device as online but unsupported."""
         # https://github.com/mill1000/midea-ac-py/issues/374#issuecomment-3240831784
         TEST_RESPONSE = bytes.fromhex(
-            "aa63cc0000000000000301fe00000043005000728c8000bc00728c728c808000010141ff010203000603010000000000000001000103010000000000000000000001000100010000000000000000000000000001000200000100000101000102ff02ffa2")
+            "aa63cc0000000000000301fe00000043005000728c8000bc00728c728c808000010141ff010203000603010000000000000001000103010000000000000000000001000100010000000000000000000000000001000200000100000101000102ff02ffa2"
+        )
 
         # Create a dummy device
         device = AC(0, 0, 0)
@@ -997,15 +1145,19 @@ class TestSendCommandGetResponse(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(device.supported, False)
 
         # Patch _send_command to return response
-        with patch("msmart.base_device.Device._send_command", return_value=[TEST_RESPONSE]) as patched_method:
+        with patch(
+            "msmart.base_device.Device._send_command", return_value=[TEST_RESPONSE]
+        ) as patched_method:
 
             with self.assertLogs("msmart", logging.ERROR) as log:
                 # Refresh device
                 await device.refresh()
 
                 # Check for error message
-                self.assertRegex("\n".join(log.output),
-                                 "Received device type.*expected device type 0xAC")
+                self.assertRegex(
+                    "\n".join(log.output),
+                    "Received device type.*expected device type 0xAC",
+                )
 
             # Assert patch method was awaited
             patched_method.assert_awaited()
@@ -1019,22 +1171,27 @@ class TestSendCommandGetResponse(unittest.IsolatedAsyncioTestCase):
         # "Notify" response with the same ID as capabilities response
         # https://github.com/mill1000/midea-msmart/issues/122#issue-2281252018
         TEST_RESPONSE = bytes.fromhex(
-            "aa1aac00000000000205b50310060101090001010a000101dcbcb4")
+            "aa1aac00000000000205b50310060101090001010a000101dcbcb4"
+        )
 
         # Create a dummy device
         device = AC(0, 0, 0)
 
         # Patch _send_command to return test response
-        with patch("msmart.base_device.Device._send_command", return_value=[TEST_RESPONSE]) as patched_method:
+        with patch(
+            "msmart.base_device.Device._send_command", return_value=[TEST_RESPONSE]
+        ) as patched_method:
             # Get device capabilities
             with self.assertLogs("msmart", logging.DEBUG) as log:
                 await device.get_capabilities()
 
-                self.assertRegex("\n".join(log.output),
-                                 "Failed to query capabilities from device.*")
+                self.assertRegex(
+                    "\n".join(log.output), "Failed to query capabilities from device.*"
+                )
 
-                self.assertRegex("\n".join(log.output),
-                                 "Ignored response of type.*from device.*")
+                self.assertRegex(
+                    "\n".join(log.output), "Ignored response of type.*from device.*"
+                )
 
             # Assert patch method was awaited
             patched_method.assert_awaited()
@@ -1054,12 +1211,15 @@ class TestDeprecation(unittest.TestCase):
             current_energy = device.current_energy_usage
             power = device.real_time_power_usage
 
-            self.assertRegex("\n".join(log.output),
-                             "'total_energy_usage' is deprecated")
-            self.assertRegex("\n".join(log.output),
-                             "'current_energy_usage' is deprecated")
-            self.assertRegex("\n".join(log.output),
-                             "'real_time_power_usage' is deprecated")
+            self.assertRegex(
+                "\n".join(log.output), "'total_energy_usage' is deprecated"
+            )
+            self.assertRegex(
+                "\n".join(log.output), "'current_energy_usage' is deprecated"
+            )
+            self.assertRegex(
+                "\n".join(log.output), "'real_time_power_usage' is deprecated"
+            )
 
     def test_deprecated_use_alternate_energy_format(self) -> None:
         """Test setting alternate energy format property emits a warning."""
@@ -1070,12 +1230,14 @@ class TestDeprecation(unittest.TestCase):
         with self.assertLogs("msmart", logging.DEBUG) as log:
             device.use_alternate_energy_format = True
 
-            self.assertRegex("\n".join(log.output),
-                             "'use_alternate_energy_format' is deprecated.")
+            self.assertRegex(
+                "\n".join(log.output), "'use_alternate_energy_format' is deprecated."
+            )
 
 
 class TestCapabilityOverrides(unittest.TestCase):
     """Test overriding device capabilities via serialized dict."""
+
     # pylint: disable=protected-access
 
     def test_target_temperatures(self) -> None:
@@ -1092,9 +1254,7 @@ class TestCapabilityOverrides(unittest.TestCase):
 
     def test_operational_modes(self) -> None:
         """Test overriding operational modes."""
-        TEST_OVERRIDE = {
-            "supported_modes": ["HEAT", "COOL", "AUTO"]
-        }
+        TEST_OVERRIDE = {"supported_modes": ["HEAT", "COOL", "AUTO"]}
 
         EXPECTED_VALUE = [
             AC.OperationalMode.HEAT,
@@ -1113,9 +1273,7 @@ class TestCapabilityOverrides(unittest.TestCase):
 
     def test_swing_modes(self) -> None:
         """Test overriding swing modes."""
-        TEST_OVERRIDE = {
-            "supported_swing_modes": ["BOTH", "HORIZONTAL"]
-        }
+        TEST_OVERRIDE = {"supported_swing_modes": ["BOTH", "HORIZONTAL"]}
         EXPECTED_VALUE = [
             AC.SwingMode.BOTH,
             AC.SwingMode.HORIZONTAL,
@@ -1132,9 +1290,7 @@ class TestCapabilityOverrides(unittest.TestCase):
 
     def test_fan_speeds(self) -> None:
         """Test overriding fan speeds."""
-        TEST_OVERRIDE = {
-            "supported_fan_speeds": ["AUTO", "HIGH"]
-        }
+        TEST_OVERRIDE = {"supported_fan_speeds": ["AUTO", "HIGH"]}
         EXPECTED_VALUE = [
             AC.FanSpeed.AUTO,
             AC.FanSpeed.HIGH,
@@ -1151,9 +1307,7 @@ class TestCapabilityOverrides(unittest.TestCase):
 
     def test_aux_modes(self) -> None:
         """Test overriding aux heat modes."""
-        TEST_OVERRIDE = {
-            "supported_aux_modes": ["OFF", "AUX_ONLY"]
-        }
+        TEST_OVERRIDE = {"supported_aux_modes": ["OFF", "AUX_ONLY"]}
         EXPECTED_VALUE = [
             AC.AuxHeatMode.OFF,
             AC.AuxHeatMode.AUX_ONLY,
@@ -1170,9 +1324,7 @@ class TestCapabilityOverrides(unittest.TestCase):
 
     def test_rate_selects(self) -> None:
         """Test overriding rate selects."""
-        TEST_OVERRIDE = {
-            "supported_rate_selects": ["OFF", "LEVEL_5"]
-        }
+        TEST_OVERRIDE = {"supported_rate_selects": ["OFF", "LEVEL_5"]}
         EXPECTED_VALUE = [
             AC.RateSelect.OFF,
             AC.RateSelect.LEVEL_5,
@@ -1234,11 +1386,16 @@ class TestCapabilityOverrides(unittest.TestCase):
         # Process capability responses to add additional capabilities and supported properties
         # https://github.com/mill1000/midea-msmart/issues/150#issuecomment-2276158338
         CAPABILITIES_PAYLOAD_0 = bytes.fromhex(
-            "b50a12020101430001011402010115020101160201001a020101100201011f020103250207203c203c203c05400001000100")
+            "b50a12020101430001011402010115020101160201001a020101100201011f020103250207203c203c203c05400001000100"
+        )
         CAPABILITIES_PAYLOAD_1 = bytes.fromhex(
-            "b5051e020101130201012202010019020100390001010000")
+            "b5051e020101130201012202010019020100390001010000"
+        )
 
-        with memoryview(CAPABILITIES_PAYLOAD_0) as payload0, memoryview(CAPABILITIES_PAYLOAD_1) as payload1:
+        with (
+            memoryview(CAPABILITIES_PAYLOAD_0) as payload0,
+            memoryview(CAPABILITIES_PAYLOAD_1) as payload1,
+        ):
             resp0 = CapabilitiesResponse(payload0)
             resp1 = CapabilitiesResponse(payload1)
 
@@ -1256,8 +1413,7 @@ class TestCapabilityOverrides(unittest.TestCase):
         self.assertEqual(device.supports_vertical_swing_angle, False)
         self.assertEqual(device.supports_flash_cool, False)
 
-        self.assertNotIn(PropertyId.SWING_UD_ANGLE,
-                         device._supported_properties)
+        self.assertNotIn(PropertyId.SWING_UD_ANGLE, device._supported_properties)
         self.assertNotIn(PropertyId.JET_COOL, device._supported_properties)
 
         # Override capabilities
@@ -1275,14 +1431,13 @@ class TestCapabilityOverrides(unittest.TestCase):
         self.assertEqual(device.supports_breeze_mild, False)
         self.assertEqual(device.supports_breezeless, False)
 
-        self.assertNotIn(PropertyId.BREEZE_CONTROL,
-                         device._supported_properties)
+        self.assertNotIn(PropertyId.BREEZE_CONTROL, device._supported_properties)
 
     def test_merging(self) -> None:
         """Test merging capabilities."""
         TEST_OVERRIDE = {
             "supported_modes": ["HEAT", "COOL", "AUTO"],
-            "supported_swing_modes": ["BOTH", "HORIZONTAL"]
+            "supported_swing_modes": ["BOTH", "HORIZONTAL"],
         }
 
         EXPECTED_SWING_MODES = [
@@ -1308,10 +1463,8 @@ class TestCapabilityOverrides(unittest.TestCase):
         device.override_capabilities(TEST_OVERRIDE, merge=True)
 
         # Assert merged capability match expected
-        self.assertCountEqual(
-            device.supported_swing_modes, EXPECTED_SWING_MODES)
-        self.assertCountEqual(
-            device.supported_operation_modes, EXPECTED_OP_MODES)
+        self.assertCountEqual(device.supported_swing_modes, EXPECTED_SWING_MODES)
+        self.assertCountEqual(device.supported_operation_modes, EXPECTED_OP_MODES)
 
 
 if __name__ == "__main__":
