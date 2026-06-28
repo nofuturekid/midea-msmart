@@ -193,7 +193,9 @@ class GetCapabilitiesCommand(Command):
 
         self._additional = additional
 
-    def tobytes(self) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
+    def tobytes(
+        self,
+    ) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
         if not self._additional:
             # Get capabilities
             payload = bytes([0xB5, 0x01, 0x00])
@@ -211,21 +213,41 @@ class GetStateCommand(Command):
 
         self.temperature_type = TemperatureType.INDOOR
 
-    def tobytes(self) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
-        return super().tobytes(bytes([
-            # Get state
-            0x41,
-            # Unknown
-            0x81, 0x00, 0xFF, 0x03, 0xFF, 0x00,
-            # Temperature request
-            self.temperature_type,
-            # Unknown
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            # Unknown
-            0x03,
-        ]))
+    def tobytes(
+        self,
+    ) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
+        return super().tobytes(
+            bytes(
+                [
+                    # Get state
+                    0x41,
+                    # Unknown
+                    0x81,
+                    0x00,
+                    0xFF,
+                    0x03,
+                    0xFF,
+                    0x00,
+                    # Temperature request
+                    self.temperature_type,
+                    # Unknown
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    # Unknown
+                    0x03,
+                ]
+            )
+        )
 
 
 class GetEnergyUsageCommand(Command):
@@ -234,7 +256,9 @@ class GetEnergyUsageCommand(Command):
     def __init__(self) -> None:
         super().__init__(frame_type=FrameType.QUERY)
 
-    def tobytes(self) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
+    def tobytes(
+        self,
+    ) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
         payload = bytearray(20)
 
         payload[0] = 0x41
@@ -252,7 +276,9 @@ class GetGroupCommand(Command):
         self._group = group
         super().__init__(frame_type=FrameType.QUERY)
 
-    def tobytes(self) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
+    def tobytes(
+        self,
+    ) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
         payload = bytearray(20)
 
         payload[0] = 0x41
@@ -340,7 +366,9 @@ class SetStateCommand(Command):
         timer_byte = 0x80 | (hours << 2) | step
         return timer_byte, remainder
 
-    def tobytes(self) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
+    def tobytes(
+        self,
+    ) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
         # Build beep and power status bytes
         beep = 0x40 if self.beep_on else 0
         power = 0x1 if self.power_on else 0
@@ -426,42 +454,53 @@ class SetStateCommand(Command):
         # Common (AC) filter run-time reset is a momentary action on bit 0x80.
         byte_10 |= 0x80 if self.common_filter_reset else 0
 
-        return super().tobytes(bytes([
-            # Set state
-            0x40,
-            # Beep and power state
-            self.CONTROL_SOURCE | beep | power,
-            # Temperature and operational mode
-            temperature | mode,
-            # Fan speed, with the timingIsValid flag in bit 7. Without this bit
-            # set the unit ignores the on/off timer bytes below.
-            (0x80 if self.timer_valid else 0) | (self.fan_speed & 0x7F),
-            # Timer (power-on, power-off, shared sub-15-minute remainder)
-            on_timer_byte, off_timer_byte, timer_minutes,
-            # Swing mode
-            swing_mode,
-            # Follow me, alt turbo, cosy sleep level, power save, low-freq fan
-            byte_8,
-            # ECO, purifier/anion, aux heat, smart eye, ventilation, diy, comfort sleep
-            byte_9,
-            # Sleep, turbo, fahrenheit, anti-cold, night light, pmv
-            byte_10,
-            # Unknown
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00,
-            # Alternate temperature
-            temperature_alt,
-            # Target humidity
-            humidity,
-            # Unknown
-            0x00,
-            # Frost/freeze protection
-            freeze_protect,
-            # Independent aux heat
-            independent_aux_heat,
-            # Unknown
-            0x00,
-        ]))
+        return super().tobytes(
+            bytes(
+                [
+                    # Set state
+                    0x40,
+                    # Beep and power state
+                    self.CONTROL_SOURCE | beep | power,
+                    # Temperature and operational mode
+                    temperature | mode,
+                    # Fan speed, with the timingIsValid flag in bit 7. Without this bit
+                    # set the unit ignores the on/off timer bytes below.
+                    (0x80 if self.timer_valid else 0) | (self.fan_speed & 0x7F),
+                    # Timer (power-on, power-off, shared sub-15-minute remainder)
+                    on_timer_byte,
+                    off_timer_byte,
+                    timer_minutes,
+                    # Swing mode
+                    swing_mode,
+                    # Follow me, alt turbo, cosy sleep level, power save, low-freq fan
+                    byte_8,
+                    # ECO, purifier/anion, aux heat, smart eye, ventilation, diy, comfort sleep
+                    byte_9,
+                    # Sleep, turbo, fahrenheit, anti-cold, night light, pmv
+                    byte_10,
+                    # Unknown
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    # Alternate temperature
+                    temperature_alt,
+                    # Target humidity
+                    humidity,
+                    # Unknown
+                    0x00,
+                    # Frost/freeze protection
+                    freeze_protect,
+                    # Independent aux heat
+                    independent_aux_heat,
+                    # Unknown
+                    0x00,
+                ]
+            )
+        )
 
 
 class ToggleDisplayCommand(Command):
@@ -473,22 +512,42 @@ class ToggleDisplayCommand(Command):
 
         self.beep_on = True
 
-    def tobytes(self) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
+    def tobytes(
+        self,
+    ) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
         # Set beep bit
         beep = 0x40 if self.beep_on else 0
 
-        return super().tobytes(bytes([
-            # Get state
-            0x41,
-            # Beep and other flags
-            self.CONTROL_SOURCE | beep,
-            # Unknown
-            0x00, 0xFF, 0x02,
-            0x00, 0x02, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-        ]))
+        return super().tobytes(
+            bytes(
+                [
+                    # Get state
+                    0x41,
+                    # Beep and other flags
+                    self.CONTROL_SOURCE | beep,
+                    # Unknown
+                    0x00,
+                    0xFF,
+                    0x02,
+                    0x00,
+                    0x02,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                ]
+            )
+        )
 
 
 class GetPropertiesCommand(Command):
@@ -499,11 +558,15 @@ class GetPropertiesCommand(Command):
 
         self._properties = props
 
-    def tobytes(self) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
-        payload = bytearray([
-            0xB1,  # Property request
-            len(self._properties),
-        ])
+    def tobytes(
+        self,
+    ) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
+        payload = bytearray(
+            [
+                0xB1,  # Property request
+                len(self._properties),
+            ]
+        )
 
         for prop in self._properties:
             payload += struct.pack("<H", prop)
@@ -519,11 +582,15 @@ class SetPropertiesCommand(Command):
 
         self._properties = props
 
-    def tobytes(self) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
-        payload = bytearray([
-            0xB0,  # Property request
-            len(self._properties),
-        ])
+    def tobytes(
+        self,
+    ) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
+        payload = bytearray(
+            [
+                0xB0,  # Property request
+                len(self._properties),
+            ]
+        )
 
         for prop, value in self._properties.items():
             payload += struct.pack("<H", prop)
@@ -537,7 +604,7 @@ class SetPropertiesCommand(Command):
         return super().tobytes(payload)
 
 
-class Response():
+class Response:
     """Base class for AC responses."""
 
     def __init__(self, payload: memoryview) -> None:
@@ -565,7 +632,8 @@ class Response():
         payload_checksum = Frame.checksum(payload[0:-1])
         if payload_crc != payload[-1] and payload_checksum != payload[-1]:
             raise InvalidResponseException(
-                f"Payload '{payload.hex()}' failed CRC and checksum. Received: 0x{payload[-1]:X}, Expected: 0x{payload_crc:X} or 0x{payload_checksum:X}.")
+                f"Payload '{payload.hex()}' failed CRC and checksum. Received: 0x{payload[-1]:X}, Expected: 0x{payload_crc:X} or 0x{payload_checksum:X}."
+            )
 
     @classmethod
     def construct(cls, frame: bytes) -> Response:
@@ -584,7 +652,9 @@ class Response():
             response_id = frame_mv[10]
             if response_id == ResponseId.STATE:
                 response_class = StateResponse
-            elif response_id == ResponseId.CAPABILITIES and frame_type == FrameType.QUERY:
+            elif (
+                response_id == ResponseId.CAPABILITIES and frame_type == FrameType.QUERY
+            ):
                 # Some devices have unsolicited "capabilities" responses with a frame type of 0x5
                 response_class = CapabilitiesResponse
             elif response_id in [ResponseId.PROPERTIES, ResponseId.PROPERTIES_ACK]:
@@ -634,7 +704,8 @@ class CapabilitiesResponse(Response):
         self._capabilities.clear()
 
         # Define some local functions to parse capability values
-        def get_value(w) -> Callable[[int], bool]: return lambda v: v == w
+        def get_value(w) -> Callable[[int], bool]:
+            return lambda v: v == w
 
         # Define a named tuple that represents a decoder
         reader = namedtuple("decoder", "name read")
@@ -646,9 +717,11 @@ class CapabilitiesResponse(Response):
             CapabilityId.BREEZE_AWAY: reader("breeze_away", get_value(1)),
             CapabilityId.BREEZE_CONTROL: reader("breeze_control", get_value(1)),
             CapabilityId.BREEZELESS: reader("breezeless", get_value(1)),
-            CapabilityId.BUZZER:  reader("buzzer", get_value(1)),
-            CapabilityId.CASCADE:  reader("cascade", get_value(1)),
-            CapabilityId.DISPLAY_CONTROL: reader("display_control", lambda v: v in [1, 2, 100]),
+            CapabilityId.BUZZER: reader("buzzer", get_value(1)),
+            CapabilityId.CASCADE: reader("cascade", get_value(1)),
+            CapabilityId.DISPLAY_CONTROL: reader(
+                "display_control", lambda v: v in [1, 2, 100]
+            ),
             CapabilityId.ENERGY: [
                 reader("energy_stats", lambda v: v in [2, 3, 4, 5]),
                 reader("energy_setting", lambda v: v in [3, 5]),
@@ -668,40 +741,43 @@ class CapabilitiesResponse(Response):
                 reader("filter_notice", lambda v: v in [1, 2, 4]),
                 reader("filter_clean", lambda v: v in [3, 4]),
             ],
-            CapabilityId.HUMIDITY:
-            [
+            CapabilityId.HUMIDITY: [
                 reader("humidity_auto_set", lambda v: v in [1, 2]),
                 reader("humidity_manual_set", lambda v: v in [2, 3]),
             ],
             CapabilityId.JET_COOL: reader("jet_cool", get_value(1)),
             CapabilityId.MODES: [
-                reader("heat_mode", lambda v:
-                       v in [1, 2, 4, 6, 7, 9, 10, 11, 12, 13]),
-                reader("cool_mode", lambda v:
-                       v in [0, 1, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15]),
-                reader("dry_mode", lambda v:
-                       v in [0, 1, 5, 6, 9, 11, 13, 14, 15]),
-                reader("auto_mode", lambda v:
-                       v in [0, 1, 2, 7, 8, 9, 13, 14]),
+                reader("heat_mode", lambda v: v in [
+                       1, 2, 4, 6, 7, 9, 10, 11, 12, 13]),
+                reader(
+                    "cool_mode",
+                    lambda v: v in [0, 1, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15],
+                ),
+                reader("dry_mode", lambda v: v in [
+                       0, 1, 5, 6, 9, 11, 13, 14, 15]),
+                reader("auto_mode", lambda v: v in [0, 1, 2, 7, 8, 9, 13, 14]),
                 reader("aux_heat_mode", lambda v: v == 9),  # Heat & Aux
-                reader("aux_mode", lambda v:
-                       v in [9, 10, 11, 13, 14, 15]),  # Aux only
+                reader("aux_mode", lambda v: v in [
+                       9, 10, 11, 13, 14, 15]),  # Aux only
             ],
             CapabilityId.OUT_SILENT: reader("out_silent", lambda v: v in [1, 3]),
             CapabilityId.PRESET_ECO: reader("eco", lambda v: v in [1, 2]),
-            CapabilityId.PRESET_FREEZE_PROTECTION: reader("freeze_protection", get_value(1)),
+            CapabilityId.PRESET_FREEZE_PROTECTION: reader(
+                "freeze_protection", get_value(1)
+            ),
             CapabilityId.PRESET_IECO: reader("ieco", get_value(1)),
-            CapabilityId.PRESET_TURBO:  [
+            CapabilityId.PRESET_TURBO: [
                 reader("turbo_heat", lambda v: v in [1, 3]),
                 reader("turbo_cool", lambda v: v < 2),
             ],
-            CapabilityId.RATE_SELECT:  [
+            CapabilityId.RATE_SELECT: [
                 reader("rate_select_2_level", get_value(1)),  # Gear
-                reader("rate_select_5_level", lambda v: v in [
-                       2, 3]),  # Genmode and Gear5
+                reader(
+                    "rate_select_5_level", lambda v: v in [2, 3]
+                ),  # Genmode and Gear5
             ],
-            CapabilityId.SELF_CLEAN:  reader("self_clean", get_value(1)),
-            CapabilityId.SMART_EYE:  reader("smart_eye", get_value(1)),
+            CapabilityId.SELF_CLEAN: reader("self_clean", get_value(1)),
+            CapabilityId.SMART_EYE: reader("smart_eye", get_value(1)),
             CapabilityId.SWING_LR_ANGLE: reader("swing_horizontal_angle", get_value(1)),
             CapabilityId.SWING_UD_ANGLE: reader("swing_vertical_angle", get_value(1)),
             CapabilityId.SWING_MODES: [
@@ -709,8 +785,8 @@ class CapabilitiesResponse(Response):
                 reader("swing_vertical", lambda v: v < 2),
             ],
             # CapabilityId.TEMPERATURES too complex to be handled here
-            CapabilityId.WIND_OFF_ME:  reader("wind_off_me", get_value(1)),
-            CapabilityId.WIND_ON_ME:  reader("wind_on_me", get_value(1)),
+            CapabilityId.WIND_OFF_ME: reader("wind_off_me", get_value(1)),
+            CapabilityId.WIND_ON_ME: reader("wind_on_me", get_value(1)),
             # CapabilityId._UNKNOWN is a special case
         }
 
@@ -730,7 +806,7 @@ class CapabilitiesResponse(Response):
                 continue
 
             # Unpack 16 bit ID
-            (raw_id, ) = struct.unpack("<H", caps[0:2])
+            (raw_id,) = struct.unpack("<H", caps[0:2])
 
             # Covert ID to enumerate type
             try:
@@ -739,7 +815,7 @@ class CapabilitiesResponse(Response):
                 _LOGGER.info(
                     "Unknown capability ID: 0x%04X, Size: %d.", raw_id, size)
                 # Advanced to next capability
-                caps = caps[3+size:]
+                caps = caps[3 + size:]
                 continue
 
             # Fetch first cap value
@@ -748,7 +824,8 @@ class CapabilitiesResponse(Response):
             # Apply predefined capability reader if it exists
             if capability_id in capability_readers:
                 # Local function to apply a reader
-                def apply(d, v): return {d.name: d.read(v)}
+                def apply(d, v):
+                    return {d.name: d.read(v)}
 
                 reader = capability_readers[capability_id]
                 if isinstance(reader, list):
@@ -778,14 +855,18 @@ class CapabilitiesResponse(Response):
             elif capability_id == CapabilityId._UNKNOWN:
                 # Suppress warnings from unknown capability
                 _LOGGER.debug(
-                    "Ignored unknown capability ID: 0x%04X, Size: %d.", capability_id, size)
+                    "Ignored unknown capability ID: 0x%04X, Size: %d.",
+                    capability_id,
+                    size,
+                )
 
             else:
                 _LOGGER.info(
-                    "Unsupported capability %r, Size: %d.", capability_id, size)
+                    "Unsupported capability %r, Size: %d.", capability_id, size
+                )
 
             # Advanced to next capability
-            caps = caps[3+size:]
+            caps = caps[3 + size:]
 
         # Check if there are additional capabilities
         if len(caps) > 1:
@@ -795,7 +876,9 @@ class CapabilitiesResponse(Response):
         # If any fan_ capability was received, check against them
         if any(k.startswith("fan_") for k in self._capabilities):
             # Assume that a fan capable of custom speeds is capable of any speed
-            return self._capabilities.get(f"fan_{speed}", False) or self._capabilities.get("fan_custom", False)
+            return self._capabilities.get(
+                f"fan_{speed}", False
+            ) or self._capabilities.get("fan_custom", False)
 
         # Otherwise return a default set for devices that don't send the capability
         return speed in ["low", "medium", "high", "auto"]
@@ -921,8 +1004,9 @@ class CapabilitiesResponse(Response):
 
     @property
     def turbo(self) -> bool:
-        return (self._capabilities.get("turbo_heat", False)
-                or self._capabilities.get("turbo_cool", False))
+        return self._capabilities.get("turbo_heat", False) or self._capabilities.get(
+            "turbo_cool", False
+        )
 
     @property
     def freeze_protection(self) -> bool:
@@ -941,8 +1025,9 @@ class CapabilitiesResponse(Response):
         # 0x20), so a device that reports either should expose the entity.
         # Previously only "notice" was honored, which left "clean"-type units
         # (value == 3) without a filter sensor.
-        return (self._capabilities.get("filter_notice", False)
-                or self._capabilities.get("filter_clean", False))
+        return self._capabilities.get("filter_notice", False) or self._capabilities.get(
+            "filter_clean", False
+        )
 
     @property
     def min_temperature(self) -> int:
@@ -961,8 +1046,9 @@ class CapabilitiesResponse(Response):
     @property
     def humidity(self) -> bool:
         # TODO Unsure the difference between these two
-        return (self._capabilities.get("humidity_auto_set", False)
-                or self._capabilities.get("humidity_manual_set", False))
+        return self._capabilities.get(
+            "humidity_auto_set", False
+        ) or self._capabilities.get("humidity_manual_set", False)
 
     @property
     def target_humidity(self) -> bool:
@@ -1057,7 +1143,9 @@ class StateResponse(Response):
 
         return hours * 60 + step * 15 + minutes
 
-    def _parse_temperature(self, data: int, decimals: float, fahrenheit: bool) -> Optional[float]:
+    def _parse_temperature(
+        self, data: int, decimals: float, fahrenheit: bool
+    ) -> Optional[float]:
         """Parse a temperature value from the payload using additional precision bits as needed."""
         if data == 0xFF:
             return None
@@ -1132,9 +1220,11 @@ class StateResponse(Response):
 
         # Decode temperatures using additional precision bits
         self.indoor_temperature = self._parse_temperature(
-            payload[11], (payload[15] & 0xF) / 10, self.fahrenheit)
+            payload[11], (payload[15] & 0xF) / 10, self.fahrenheit
+        )
         self.outdoor_temperature = self._parse_temperature(
-            payload[12], (payload[15] >> 4) / 10, self.fahrenheit)
+            payload[12], (payload[15] >> 4) / 10, self.fahrenheit
+        )
 
         # Decode alternate target temperature
         target_temperature_alt = payload[13] & 0x1F
@@ -1145,11 +1235,11 @@ class StateResponse(Response):
 
         self.filter_alert = bool(payload[13] & 0x20)
 
-        self.display_on = (payload[14] != 0x70)
+        self.display_on = payload[14] != 0x70
 
         self.error_code = payload[16]
         # Water tank full is reported as a specific error code value
-        self.water_full = (payload[16] == 38)
+        self.water_full = payload[16] == 38
 
         if len(payload) < 20:
             return
@@ -1192,7 +1282,7 @@ class PropertiesResponse(Response):
                 continue
 
             # Unpack 16 bit ID
-            (raw_id, ) = struct.unpack("<H", props[0:2])
+            (raw_id,) = struct.unpack("<H", props[0:2])
 
             # Covert ID to enumerate type
             try:
@@ -1201,7 +1291,7 @@ class PropertiesResponse(Response):
                 _LOGGER.warning(
                     "Unknown property ID 0x%04X, Size: %d.", raw_id, size)
                 # Advanced to next property
-                props = props[4+size:]
+                props = props[4 + size:]
                 continue
 
             # Check execution result and log any errors
@@ -1219,7 +1309,7 @@ class PropertiesResponse(Response):
                     "Unsupported property %r, Size: %d.", property, size)
 
             # Advanced to next property
-            props = props[4+size:]
+            props = props[4 + size:]
 
     def get_property(self, id: PropertyId) -> Optional[Any]:
         return self._properties.get(id, None)
@@ -1227,6 +1317,267 @@ class PropertiesResponse(Response):
 
 class Group1Response(Response):
     """Group 1 response."""
+
+    # Discharge temperature (TP) sensor linearization table. The raw byte is a
+    # non-linear thermistor index that must be mapped to degrees Celsius.
+    _PQ_TEMP_TABLE = [
+        -48,
+        -48,
+        -33,
+        -25,
+        -20,
+        -16,
+        -13,
+        -10,
+        -7,
+        -4,
+        -2,
+        0,
+        2,
+        3,
+        5,
+        6,
+        8,
+        9,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        24,
+        25,
+        26,
+        27,
+        27,
+        28,
+        29,
+        30,
+        30,
+        31,
+        32,
+        32,
+        33,
+        34,
+        34,
+        35,
+        36,
+        36,
+        37,
+        37,
+        38,
+        39,
+        39,
+        40,
+        40,
+        41,
+        41,
+        42,
+        42,
+        43,
+        44,
+        44,
+        45,
+        45,
+        46,
+        46,
+        47,
+        47,
+        48,
+        48,
+        49,
+        49,
+        50,
+        50,
+        51,
+        51,
+        52,
+        52,
+        53,
+        53,
+        54,
+        54,
+        55,
+        55,
+        56,
+        56,
+        56,
+        57,
+        57,
+        58,
+        58,
+        59,
+        59,
+        60,
+        60,
+        61,
+        61,
+        62,
+        62,
+        63,
+        63,
+        63,
+        64,
+        64,
+        65,
+        65,
+        66,
+        66,
+        67,
+        67,
+        68,
+        68,
+        69,
+        69,
+        69,
+        70,
+        70,
+        71,
+        71,
+        72,
+        72,
+        73,
+        73,
+        74,
+        74,
+        75,
+        75,
+        76,
+        76,
+        76,
+        77,
+        77,
+        78,
+        78,
+        79,
+        79,
+        80,
+        80,
+        81,
+        81,
+        82,
+        82,
+        83,
+        83,
+        84,
+        84,
+        85,
+        85,
+        86,
+        86,
+        87,
+        87,
+        88,
+        88,
+        89,
+        90,
+        90,
+        91,
+        91,
+        92,
+        92,
+        93,
+        93,
+        94,
+        95,
+        95,
+        96,
+        96,
+        97,
+        98,
+        98,
+        99,
+        99,
+        100,
+        101,
+        101,
+        102,
+        103,
+        103,
+        104,
+        105,
+        105,
+        106,
+        107,
+        107,
+        108,
+        109,
+        109,
+        110,
+        111,
+        112,
+        112,
+        113,
+        114,
+        115,
+        116,
+        116,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123,
+        124,
+        125,
+        126,
+        127,
+        128,
+        129,
+        130,
+        135,
+        136,
+        137,
+        138,
+        140,
+        141,
+        142,
+        144,
+        145,
+        147,
+        148,
+        150,
+        152,
+        153,
+        155,
+        157,
+        159,
+        161,
+        163,
+        165,
+        168,
+        170,
+        173,
+        175,
+        178,
+        181,
+        185,
+        188,
+        192,
+        196,
+        201,
+        206,
+        211,
+        218,
+        225,
+        233,
+        243,
+        254,
+        255,
+        255,
+        255,
+        255,
+        255,
+    ]
 
     def __init__(self, payload: memoryview) -> None:
         super().__init__(payload)
@@ -1259,8 +1610,7 @@ class Group1Response(Response):
         self.T3 = (payload[12] - 50) / 2
         self.T4 = (payload[13] - 50) / 2
 
-        # ucPQTempTab = [-48,-48,-33,-25,-20,-16,-13,-10,-7,-4,-2,0,2,3,5,6,8,9,11,12,13,14,15,16,17,18,19,20,21,22,23,24,24,25,26,27,27,28,29,30,30,31,32,32,33,34,34,35,36,36,37,37,38,39,39,40,40,41,41,42,42,43,44,44,45,45,46,46,47,47,48,48,49,49,50,50,51,51,52,52,53,53,54,54,55,55,56,56,56,57,57,58,58,59,59,60,60,61,61,62,62,63,63,63,64,64,65,65,66,66,67,67,68,68,69,69,69,70,70,71,71,72,72,73,73,74,74,75,75,76,76,76,77,77,78,78,79,79,80,80,81,81,82,82,83,83,84,84,85,85,86,86,87,87,88,88,89,90,90,91,91,92,92,93,93,94,95,95,96,96,97,98,98,99,99,100,101,101,102,103,103,104,105,105,106,107,107,108,109,109,110,111,112,112,113,114,115,116,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,135,136,137,138,140,141,142,144,145,147,148,150,152,153,155,157,159,161,163,165,168,170,173,175,178,181,185,188,192,196,201,206,211,218,225,233,243,254,255,255,255,255,255]
-        self.TP = payload[14]  # ucPQTempTab[payload[14]]
+        self.TP = self._PQ_TEMP_TABLE[payload[14]]
 
 
 class Group2Response(Response):
@@ -1304,31 +1654,28 @@ class EnergyUsageResponse(Response):
             return 10 * (d >> 4) + (d & 0xF)
 
         def parse_energy(d: bytes) -> tuple[float, float]:
-            bcd = (10000 * decode_bcd(d[0]) +
-                   100 * decode_bcd(d[1]) +
-                   1 * decode_bcd(d[2]) +
-                   0.01 * decode_bcd(d[3]))
-            binary = ((d[0] << 24) +
-                      (d[1] << 16) +
-                      (d[2] << 8) +
-                      d[3]) / 10
+            bcd = (
+                10000 * decode_bcd(d[0])
+                + 100 * decode_bcd(d[1])
+                + 1 * decode_bcd(d[2])
+                + 0.01 * decode_bcd(d[3])
+            )
+            binary = ((d[0] << 24) + (d[1] << 16) + (d[2] << 8) + d[3]) / 10
             return bcd, binary
 
         def parse_power(d: bytes) -> tuple[float, float]:
-            bcd = (1000 * decode_bcd(d[0]) +
-                   10 * decode_bcd(d[1]) +
-                   0.1 * decode_bcd(d[2]))
-            binary = ((d[0] << 16) +
-                      (d[1] << 8) +
-                      d[2]) / 10
+            bcd = (
+                1000 * decode_bcd(d[0]) + 10 *
+                decode_bcd(d[1]) + 0.1 * decode_bcd(d[2])
+            )
+            binary = ((d[0] << 16) + (d[1] << 8) + d[2]) / 10
             return bcd, binary
 
         # Lua reference decodes real time power field in BCD and binary form
         # JS reference decodes multiple energy/power fields in BCD only.
 
         # Total energy in bytes 4 - 7
-        total_energy_bcd, total_energy_binary = parse_energy(
-            payload[4:8])
+        total_energy_bcd, total_energy_binary = parse_energy(payload[4:8])
 
         # JS references decodes bytes 8 - 11 as "total running energy"
         # Older JS does not decode these bytes, and sample payloads contain bogus data
