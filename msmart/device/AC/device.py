@@ -9,13 +9,29 @@ from msmart.const import DeviceType
 from msmart.frame import InvalidFrameException
 from msmart.utils import CapabilityManager, MideaIntEnum, deprecated
 
-from .command import (CapabilitiesResponse, Command, EnergyUsageResponse,
-                      GetCapabilitiesCommand, GetEnergyUsageCommand,
-                      GetGroup5Command, GetPropertiesCommand, GetStateCommand,
-                      Group5Response, InvalidResponseException,
-                      PropertiesResponse, PropertyId, Response,
-                      SetPropertiesCommand, SetStateCommand, StateResponse,
-                      ToggleDisplayCommand)
+from .command import (
+    CapabilitiesResponse,
+    Command,
+    EnergyUsageResponse,
+    GetCapabilitiesCommand,
+    GetEnergyUsageCommand,
+    GetGroupCommand,
+    GetPropertiesCommand,
+    GetStateCommand,
+    Group1Response,
+    Group2Response,
+    Group5Response,
+    Group7Response,
+    Group11Response,
+    InvalidResponseException,
+    PropertiesResponse,
+    PropertyId,
+    Response,
+    SetPropertiesCommand,
+    SetStateCommand,
+    StateResponse,
+    ToggleDisplayCommand,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -138,17 +154,22 @@ class AirConditioner(Device):
         SELF_CLEAN = auto()
 
         DEFAULT = (
-            CUSTOM_FAN_SPEED |
-            ECO | TURBO | FREEZE_PROTECTION |
-            DISPLAY_CONTROL | FILTER_REMINDER |
-            PURIFIER
+            CUSTOM_FAN_SPEED
+            | ECO
+            | TURBO
+            | FREEZE_PROTECTION
+            | DISPLAY_CONTROL
+            | FILTER_REMINDER
+            | PURIFIER
         )
 
     # Create a dict to map attributes to property values
     _PROPERTY_MAP = {
-        PropertyId.BREEZE_AWAY: lambda s: s._breeze_mode == AirConditioner.BreezeMode.BREEZE_AWAY,
+        PropertyId.BREEZE_AWAY: lambda s: s._breeze_mode
+        == AirConditioner.BreezeMode.BREEZE_AWAY,
         PropertyId.BREEZE_CONTROL: lambda s: s._breeze_mode,
-        PropertyId.BREEZELESS: lambda s: s._breeze_mode == AirConditioner.BreezeMode.BREEZELESS,
+        PropertyId.BREEZELESS: lambda s: s._breeze_mode
+        == AirConditioner.BreezeMode.BREEZELESS,
         PropertyId.CASCADE: lambda s: s._cascade_mode,
         PropertyId.FRESH_AIR: lambda s: (s._fresh_air, s._fresh_air_fan_speed),
         PropertyId.IECO: lambda s: s._ieco,
@@ -170,9 +191,14 @@ class AirConditioner(Device):
         "additional_capabilities": ("_capabilities", Capability),
     }
 
-    def __init__(self, ip: str, device_id: int,  port: int, **kwargs) -> None:
-        super().__init__(ip=ip, port=port, device_id=device_id,
-                         device_type=DeviceType.AIR_CONDITIONER, **kwargs)
+    def __init__(self, ip: str, device_id: int, port: int, **kwargs) -> None:
+        super().__init__(
+            ip=ip,
+            port=port,
+            device_id=device_id,
+            device_type=DeviceType.AIR_CONDITIONER,
+            **kwargs,
+        )
 
         # Basic controls
         self._beep_on = False
@@ -245,6 +271,18 @@ class AirConditioner(Device):
         self._defrost_active = None
         self._outdoor_fan_speed = None
 
+        self._compressor_frequency = None
+        self._outdoor_unit_total_current = None
+        self._outdoor_unit_voltage = None
+        self._T1 = None
+        self._T2 = None
+        self._T3 = None
+        self._T4 = None
+        self._TP = None
+        self._indoor_fan_speed = None
+
+        self._louver_angle = None
+
         self._total_energy_usage = {
             AirConditioner.EnergyDataFormat.BCD: None,
             AirConditioner.EnergyDataFormat.BINARY: None,
@@ -264,20 +302,28 @@ class AirConditioner(Device):
         self._max_target_temperature = 30
 
         self._capabilities: CapabilityManager = CapabilityManager(
-            AirConditioner.Capability.DEFAULT)
+            AirConditioner.Capability.DEFAULT
+        )
 
         self._supported_op_modes = cast(
-            list[AirConditioner.OperationalMode], AirConditioner.OperationalMode.list())
+            list[AirConditioner.OperationalMode], AirConditioner.OperationalMode.list()
+        )
         self._supported_swing_modes = cast(
-            list[AirConditioner.SwingMode], AirConditioner.SwingMode.list())
+            list[AirConditioner.SwingMode], AirConditioner.SwingMode.list()
+        )
         self._supported_fan_speeds = cast(
-            list[AirConditioner.FanSpeed], AirConditioner.FanSpeed.list())
+            list[AirConditioner.FanSpeed], AirConditioner.FanSpeed.list()
+        )
         self._supported_rate_selects = [AirConditioner.RateSelect.OFF]
         self._supported_aux_modes = [AirConditioner.AuxHeatMode.OFF]
 
         # Misc
+        self._request_group1_data = True
+        self._request_group2_data = True
         self._request_energy_usage = False
-        self._request_group5_data = False
+        self._request_group5_data = True
+        self._request_group7_data = True
+        self._request_group11_data = True
 
         # Default to assuming device can't handle any properties
         self._supported_properties = set()
@@ -287,30 +333,29 @@ class AirConditioner(Device):
         """Update the local state from a device state response."""
 
         if isinstance(res, StateResponse):
-            _LOGGER.debug("State response payload from device %s: %s",
-                          self.id, res)
+            _LOGGER.debug("State response payload from device %s: %s", self.id, res)
 
             self._power_state = res.power_on
 
             self._target_temperature = res.target_temperature
             self._operational_mode = cast(
                 AirConditioner.OperationalMode,
-                AirConditioner.OperationalMode.get_from_value(res.operational_mode))
+                AirConditioner.OperationalMode.get_from_value(res.operational_mode),
+            )
 
             if self.supports_custom_fan_speed:
                 # Attempt to fetch enum of fan speed, but fallback to raw int if custom
                 try:
-                    self._fan_speed = AirConditioner.FanSpeed(
-                        cast(int, res.fan_speed))
+                    self._fan_speed = AirConditioner.FanSpeed(cast(int, res.fan_speed))
                 except ValueError:
                     self._fan_speed = cast(int, res.fan_speed)
             else:
-                self._fan_speed = AirConditioner.FanSpeed.get_from_value(
-                    res.fan_speed)
+                self._fan_speed = AirConditioner.FanSpeed.get_from_value(res.fan_speed)
 
             self._swing_mode = cast(
                 AirConditioner.SwingMode,
-                AirConditioner.SwingMode.get_from_value(res.swing_mode))
+                AirConditioner.SwingMode.get_from_value(res.swing_mode),
+            )
 
             self._eco = res.eco
             self._turbo = res.turbo
@@ -360,22 +405,26 @@ class AirConditioner(Device):
 
         elif isinstance(res, PropertiesResponse):
             _LOGGER.debug(
-                "Properties response payload from device %s: %s", self.id, res)
+                "Properties response payload from device %s: %s", self.id, res
+            )
 
             if (angle := res.get_property(PropertyId.SWING_LR_ANGLE)) is not None:
                 self._horizontal_swing_angle = cast(
                     AirConditioner.SwingAngle,
-                    AirConditioner.SwingAngle.get_from_value(angle))
+                    AirConditioner.SwingAngle.get_from_value(angle),
+                )
 
             if (angle := res.get_property(PropertyId.SWING_UD_ANGLE)) is not None:
                 self._vertical_swing_angle = cast(
                     AirConditioner.SwingAngle,
-                    AirConditioner.SwingAngle.get_from_value(angle))
+                    AirConditioner.SwingAngle.get_from_value(angle),
+                )
 
             if (cascade := res.get_property(PropertyId.CASCADE)) is not None:
                 self._cascade_mode = cast(
                     AirConditioner.CascadeMode,
-                    AirConditioner.CascadeMode.get_from_value(cascade))
+                    AirConditioner.CascadeMode.get_from_value(cascade),
+                )
 
             if (value := res.get_property(PropertyId.SELF_CLEAN)) is not None:
                 self._self_clean_active = value
@@ -383,20 +432,30 @@ class AirConditioner(Device):
             if (rate := res.get_property(PropertyId.RATE_SELECT)) is not None:
                 self._rate_select = cast(
                     AirConditioner.RateSelect,
-                    AirConditioner.RateSelect.get_from_value(rate))
+                    AirConditioner.RateSelect.get_from_value(rate),
+                )
 
             # Breeze control supersedes breeze away and breezeless
             if (value := res.get_property(PropertyId.BREEZE_CONTROL)) is not None:
-                self._breeze_mode = (AirConditioner.BreezeMode(value) if value in AirConditioner.BreezeMode.list()
-                                     else AirConditioner.BreezeMode.OFF)
+                self._breeze_mode = (
+                    AirConditioner.BreezeMode(value)
+                    if value in AirConditioner.BreezeMode.list()
+                    else AirConditioner.BreezeMode.OFF
+                )
             else:
                 if (value := res.get_property(PropertyId.BREEZE_AWAY)) is not None:
-                    self._breeze_mode = (AirConditioner.BreezeMode.BREEZE_AWAY if value
-                                         else AirConditioner.BreezeMode.OFF)
+                    self._breeze_mode = (
+                        AirConditioner.BreezeMode.BREEZE_AWAY
+                        if value
+                        else AirConditioner.BreezeMode.OFF
+                    )
 
                 if (value := res.get_property(PropertyId.BREEZELESS)) is not None:
-                    self._breeze_mode = (AirConditioner.BreezeMode.BREEZELESS if value
-                                         else AirConditioner.BreezeMode.OFF)
+                    self._breeze_mode = (
+                        AirConditioner.BreezeMode.BREEZELESS
+                        if value
+                        else AirConditioner.BreezeMode.OFF
+                    )
 
             if (value := res.get_property(PropertyId.FRESH_AIR)) is not None:
                 self._fresh_air, self._fresh_air_fan_speed = value
@@ -410,30 +469,60 @@ class AirConditioner(Device):
             if (value := res.get_property(PropertyId.OUT_SILENT)) is not None:
                 self._out_silent = value
 
+        elif isinstance(res, Group1Response):
+            _LOGGER.debug("Group 1 response payload from device %s: %s", self.id, res)
+
+            self._compressor_frequency = res.compressor_frequency
+            self._outdoor_unit_total_current = res.outdoor_unit_total_current
+            self._outdoor_unit_voltage = res.outdoor_unit_voltage
+            self._T1 = res.T1
+            self._T2 = res.T2
+            self._T3 = res.T3
+            self._T4 = res.T4
+            self._TP = res.TP
+
+        elif isinstance(res, Group2Response):
+            _LOGGER.debug("Group 2 response payload from device %s: %s", self.id, res)
+
+            self._indoor_fan_speed = res.indoor_fan_speed
+
         elif isinstance(res, EnergyUsageResponse):
-            _LOGGER.debug("Energy response payload from device %s: %s",
-                          self.id, res)
+            _LOGGER.debug("Energy response payload from device %s: %s", self.id, res)
 
-            self._total_energy_usage = {AirConditioner.EnergyDataFormat.BCD: res.total_energy,
-                                        AirConditioner.EnergyDataFormat.BINARY: res.total_energy_binary}
+            self._total_energy_usage = {
+                AirConditioner.EnergyDataFormat.BCD: res.total_energy,
+                AirConditioner.EnergyDataFormat.BINARY: res.total_energy_binary,
+            }
 
-            self._current_energy_usage = {AirConditioner.EnergyDataFormat.BCD: res.current_energy,
-                                          AirConditioner.EnergyDataFormat.BINARY: res.current_energy_binary}
+            self._current_energy_usage = {
+                AirConditioner.EnergyDataFormat.BCD: res.current_energy,
+                AirConditioner.EnergyDataFormat.BINARY: res.current_energy_binary,
+            }
 
-            self._real_time_power_usage = {AirConditioner.EnergyDataFormat.BCD: res.real_time_power,
-                                           AirConditioner.EnergyDataFormat.BINARY: res.real_time_power_binary}
+            self._real_time_power_usage = {
+                AirConditioner.EnergyDataFormat.BCD: res.real_time_power,
+                AirConditioner.EnergyDataFormat.BINARY: res.real_time_power_binary,
+            }
 
         elif isinstance(res, Group5Response):
-            _LOGGER.debug(
-                "Group 5 response payload from device %s: %s", self.id, res)
+            _LOGGER.debug("Group 5 response payload from device %s: %s", self.id, res)
 
             self._indoor_humidity = res.humidity
             self._outdoor_fan_speed = res.outdoor_fan_speed
             self._defrost_active = res.defrost
 
+        elif isinstance(res, Group7Response):
+            _LOGGER.debug("Group 7 response payload from device %s: %s", self.id, res)
+
+            self._outdoor_unit_power = res.outdoor_unit_power
+
+        elif isinstance(res, Group11Response):
+            _LOGGER.debug("Group 11 response payload from device %s: %s", self.id, res)
+
+            self._louver_angle = res.louver_angle
+
         else:
-            _LOGGER.debug("Ignored unknown response from device %s: %s",
-                          self.id, res)
+            _LOGGER.debug("Ignored unknown response from device %s: %s", self.id, res)
 
     def _update_capabilities(self, res: CapabilitiesResponse) -> None:
         # Build list of supported operation modes
@@ -463,7 +552,7 @@ class AirConditioner(Device):
 
         self._supported_swing_modes = swing_modes
 
-       # Build list of supported fan speeds
+        # Build list of supported fan speeds
         fan_speeds = []
         if res.fan_silent:
             fan_speeds.append(AirConditioner.FanSpeed.SILENT)
@@ -481,17 +570,21 @@ class AirConditioner(Device):
 
         self._supported_fan_speeds = fan_speeds
         self._capabilities.set(
-            AirConditioner.Capability.CUSTOM_FAN_SPEED, res.fan_custom)
+            AirConditioner.Capability.CUSTOM_FAN_SPEED, res.fan_custom
+        )
 
         self._capabilities.set(AirConditioner.Capability.ECO, res.eco)
         self._capabilities.set(AirConditioner.Capability.TURBO, res.turbo)
         self._capabilities.set(
-            AirConditioner.Capability.FREEZE_PROTECTION, res.freeze_protection)
+            AirConditioner.Capability.FREEZE_PROTECTION, res.freeze_protection
+        )
 
         self._capabilities.set(
-            AirConditioner.Capability.DISPLAY_CONTROL, res.display_control)
+            AirConditioner.Capability.DISPLAY_CONTROL, res.display_control
+        )
         self._capabilities.set(
-            AirConditioner.Capability.FILTER_REMINDER, res.filter_reminder)
+            AirConditioner.Capability.FILTER_REMINDER, res.filter_reminder
+        )
 
         self._capabilities.set(AirConditioner.Capability.PURIFIER, res.anion)
 
@@ -511,23 +604,23 @@ class AirConditioner(Device):
         # We've seen devices that claim no capability but return energy data
         self._request_energy_usage |= res.energy_stats
 
+        self._capabilities.set(AirConditioner.Capability.HUMIDITY, res.humidity)
         self._capabilities.set(
-            AirConditioner.Capability.HUMIDITY, res.humidity)
-        self._capabilities.set(
-            AirConditioner.Capability.TARGET_HUMIDITY, res.target_humidity)
+            AirConditioner.Capability.TARGET_HUMIDITY, res.target_humidity
+        )
 
         self._capabilities.set(
-            AirConditioner.Capability.SWING_VERTICAL_ANGLE, res.swing_vertical_angle)
+            AirConditioner.Capability.SWING_VERTICAL_ANGLE, res.swing_vertical_angle
+        )
         self._capabilities.set(
-            AirConditioner.Capability.SWING_HORIZONTAL_ANGLE, res.swing_horizontal_angle)
+            AirConditioner.Capability.SWING_HORIZONTAL_ANGLE, res.swing_horizontal_angle
+        )
 
         self._capabilities.set(AirConditioner.Capability.CASCADE, res.cascade)
 
-        self._capabilities.set(
-            AirConditioner.Capability.FRESH_AIR, res.fresh_air)
+        self._capabilities.set(AirConditioner.Capability.FRESH_AIR, res.fresh_air)
 
-        self._capabilities.set(
-            AirConditioner.Capability.SELF_CLEAN, res.self_clean)
+        self._capabilities.set(AirConditioner.Capability.SELF_CLEAN, res.self_clean)
 
         # Add supported rate select levels
         if (rates := res.rate_select_levels) is not None:
@@ -549,19 +642,18 @@ class AirConditioner(Device):
 
         # Breeze control supersedes breeze away and breezeless
         self._capabilities.set(
-            AirConditioner.Capability.BREEZE_CONTROL, res.breeze_control)
+            AirConditioner.Capability.BREEZE_CONTROL, res.breeze_control
+        )
         if not res.breeze_control:
             self._capabilities.set(
-                AirConditioner.Capability.BREEZE_AWAY, res.breeze_away)
-            self._capabilities.set(
-                AirConditioner.Capability.BREEZELESS, res.breezeless)
+                AirConditioner.Capability.BREEZE_AWAY, res.breeze_away
+            )
+            self._capabilities.set(AirConditioner.Capability.BREEZELESS, res.breezeless)
 
         self._capabilities.set(AirConditioner.Capability.IECO, res.ieco)
-        self._capabilities.set(
-            AirConditioner.Capability.JET_COOL, res.jet_cool)
+        self._capabilities.set(AirConditioner.Capability.JET_COOL, res.jet_cool)
 
-        self._capabilities.set(
-            AirConditioner.Capability.OUT_SILENT, res.out_silent)
+        self._capabilities.set(AirConditioner.Capability.OUT_SILENT, res.out_silent)
 
         # Update supported properties from capabilities
         self._update_supported_properties()
@@ -595,7 +687,9 @@ class AirConditioner(Device):
         if self._supported_rate_selects != [AirConditioner.RateSelect.OFF]:
             self._supported_properties.add(PropertyId.RATE_SELECT)
 
-    async def _send_commands_get_responses(self, commands: Union[Command, list[Command]]) -> list[Response]:
+    async def _send_commands_get_responses(
+        self, commands: Union[Command, list[Command]]
+    ) -> list[Response]:
         """Send a list of commands and return all valid responses."""
 
         responses: list[bytes] = []
@@ -621,14 +715,20 @@ class AirConditioner(Device):
 
         return valid_responses
 
-    async def _send_command_get_response_with_class(self, command, response_class: type[Response]) -> Optional[Response]:
+    async def _send_command_get_response_with_class(
+        self, command, response_class: type[Response]
+    ) -> Optional[Response]:
         """Send a command and return the first response of the requested class."""
         for response in await self._send_commands_get_responses(command):
             if isinstance(response, response_class):
                 return response
 
-            _LOGGER.debug("Ignored response of type %s from device %s: %s",
-                          type(response), self.id, response)
+            _LOGGER.debug(
+                "Ignored response of type %s from device %s: %s",
+                type(response),
+                self.id,
+                response,
+            )
 
         return None
 
@@ -637,37 +737,43 @@ class AirConditioner(Device):
 
         # Send capabilities request and get a response
         cmd = GetCapabilitiesCommand()
-        response = await self._send_command_get_response_with_class(cmd, CapabilitiesResponse)
+        response = await self._send_command_get_response_with_class(
+            cmd, CapabilitiesResponse
+        )
         if response is None:
-            _LOGGER.error(
-                "Failed to query capabilities from device %s.", self.id)
+            _LOGGER.error("Failed to query capabilities from device %s.", self.id)
             return
 
         response = cast(CapabilitiesResponse, response)
 
-        _LOGGER.debug("Capabilities response payload from device %s: %s",
-                      self.id, response)
+        _LOGGER.debug(
+            "Capabilities response payload from device %s: %s", self.id, response
+        )
         _LOGGER.debug("Raw capabilities: %s", response.raw_capabilities)
 
         # Send 2nd capabilities request if needed
         if response.additional_capabilities:
             cmd = GetCapabilitiesCommand(True)
-            additional_response = await self._send_command_get_response_with_class(cmd, CapabilitiesResponse)
+            additional_response = await self._send_command_get_response_with_class(
+                cmd, CapabilitiesResponse
+            )
             if additional_response:
-                additional_response = cast(
-                    CapabilitiesResponse, additional_response)
+                additional_response = cast(CapabilitiesResponse, additional_response)
 
                 _LOGGER.debug(
-                    "Additional capabilities response payload from device %s: %s", self.id, additional_response)
+                    "Additional capabilities response payload from device %s: %s",
+                    self.id,
+                    additional_response,
+                )
 
                 # Merge additional capabilities
                 response.merge(additional_response)
 
-                _LOGGER.debug("Merged raw capabilities: %s",
-                              response.raw_capabilities)
+                _LOGGER.debug("Merged raw capabilities: %s", response.raw_capabilities)
             else:
                 _LOGGER.warning(
-                    "Failed to query additional capabilities from device %s.", self.id)
+                    "Failed to query additional capabilities from device %s.", self.id
+                )
 
         # Update device capabilities
         self._update_capabilities(response)
@@ -676,8 +782,7 @@ class AirConditioner(Device):
         """Toggle the device display if the device supports it."""
 
         if not self.supports_display_control:
-            _LOGGER.warning(
-                "Device %s is not capable of display control.", self.id)
+            _LOGGER.warning("Device %s is not capable of display control.", self.id)
 
         # Send the command and ignore all responses
         cmd = ToggleDisplayCommand()
@@ -691,9 +796,11 @@ class AirConditioner(Device):
         """Start a self cleaning if the device supports it."""
 
         # Start self clean via properties command
-        await self._apply_properties({
-            PropertyId.SELF_CLEAN: True,
-        })
+        await self._apply_properties(
+            {
+                PropertyId.SELF_CLEAN: True,
+            }
+        )
 
     async def refresh(self) -> None:
         """Refresh the local copy of the device state by sending a GetState command."""
@@ -703,13 +810,29 @@ class AirConditioner(Device):
         # Always request state updates
         commands.append(GetStateCommand())
 
+        # request Group 1 data
+        if self._request_group1_data:
+            commands.append(GetGroupCommand(1))
+
+        # request Group 2 data
+        if self._request_group2_data:
+            commands.append(GetGroupCommand(2))
+
         # Fetch power stats if supported
         if self._request_energy_usage:
             commands.append(GetEnergyUsageCommand())
 
         # Request Group 5 data if humidity is supported or otherwise enabled
         if self.supports_humidity or self._request_group5_data:
-            commands.append(GetGroup5Command())
+            commands.append(GetGroupCommand(5))
+
+        # Request Group 7 data
+        if self.supports_humidity or self._request_group7_data:
+            commands.append(GetGroupCommand(7))
+
+        # Request Group 11 data
+        if self.supports_humidity or self._request_group11_data:
+            commands.append(GetGroupCommand(11))
 
         # Update supported properties
         if len(self._supported_properties):
@@ -722,13 +845,14 @@ class AirConditioner(Device):
         for response in responses:
             self._update_state(response)
 
-    async def _apply_properties(self, properties: dict[PropertyId, Union[int, bool]]) -> None:
+    async def _apply_properties(
+        self, properties: dict[PropertyId, Union[int, bool]]
+    ) -> None:
         """Apply the provided properties to the device."""
 
         # Warn if attempting to update a property that isn't supported
-        for prop in (properties.keys() - self._supported_properties):
-            _LOGGER.warning(
-                "Device %s is not capable of property %r.", self.id, prop)
+        for prop in properties.keys() - self._supported_properties:
+            _LOGGER.warning("Device %s is not capable of property %r.", self.id, prop)
 
         # Always add buzzer property
         properties[PropertyId.BUZZER] = self._beep_on
@@ -742,7 +866,8 @@ class AirConditioner(Device):
         """Build a SetStateCommand mirroring the current local device state."""
 
         # Define function to return value or a default if value is None
-        def or_default(v, d) -> Any: return v if v is not None else d
+        def or_default(v, d) -> Any:
+            return v if v is not None else d
 
         cmd = SetStateCommand()
         cmd.beep_on = self._beep_on
@@ -753,8 +878,7 @@ class AirConditioner(Device):
         cmd.swing_mode = self._swing_mode
         cmd.eco = or_default(self._eco, False)
         cmd.turbo = or_default(self._turbo, False)
-        cmd.freeze_protection = or_default(
-            self._freeze_protection, False)
+        cmd.freeze_protection = or_default(self._freeze_protection, False)
         cmd.sleep = or_default(self._sleep, False)
         cmd.fahrenheit = or_default(self._fahrenheit_unit, False)
         cmd.follow_me = or_default(self._follow_me, False)
@@ -812,34 +936,48 @@ class AirConditioner(Device):
         # Warn if trying to apply unsupported modes
         if self._operational_mode not in self.supported_operation_modes:
             _LOGGER.warning(
-                "Device %s is not capable of operational mode %r.",  self.id, self._operational_mode)
+                "Device %s is not capable of operational mode %r.",
+                self.id,
+                self._operational_mode,
+            )
 
-        if (self._fan_speed not in self.supported_fan_speeds
-                and not self.supports_custom_fan_speed):
+        if (
+            self._fan_speed not in self.supported_fan_speeds
+            and not self.supports_custom_fan_speed
+        ):
             _LOGGER.warning(
-                "Device %s is not capable of fan speed %r.",  self.id, self._fan_speed)
+                "Device %s is not capable of fan speed %r.", self.id, self._fan_speed
+            )
 
         if self._swing_mode not in self.supported_swing_modes:
             _LOGGER.warning(
-                "Device %s is not capable of swing mode %r.",  self.id, self._swing_mode)
+                "Device %s is not capable of swing mode %r.", self.id, self._swing_mode
+            )
 
         if self._turbo and not self.supports_turbo:
             _LOGGER.warning("Device %s is not capable of turbo mode.", self.id)
 
         if self._eco and not self.supports_eco:
-            _LOGGER.warning("Device %s is not capable of eco mode.",  self.id)
+            _LOGGER.warning("Device %s is not capable of eco mode.", self.id)
 
         if self._freeze_protection and not self.supports_freeze_protection:
-            _LOGGER.warning(
-                "Device %s is not capable of freeze protection.", self.id)
+            _LOGGER.warning("Device %s is not capable of freeze protection.", self.id)
 
-        if self._rate_select != AirConditioner.RateSelect.OFF and self._rate_select not in self.supported_rate_selects:
+        if (
+            self._rate_select != AirConditioner.RateSelect.OFF
+            and self._rate_select not in self.supported_rate_selects
+        ):
             _LOGGER.warning(
-                "Device %s is not capable of rate select %r.",  self.id, self._rate_select)
+                "Device %s is not capable of rate select %r.",
+                self.id,
+                self._rate_select,
+            )
 
-        if self._aux_mode != AirConditioner.AuxHeatMode.OFF and self._aux_mode not in self.supported_aux_modes:
-            _LOGGER.warning(
-                "Device is not capable of aux mode %r.", self._aux_mode)
+        if (
+            self._aux_mode != AirConditioner.AuxHeatMode.OFF
+            and self._aux_mode not in self.supported_aux_modes
+        ):
+            _LOGGER.warning("Device is not capable of aux mode %r.", self._aux_mode)
 
         cmd = self._build_set_state_command()
 
@@ -978,7 +1116,10 @@ class AirConditioner(Device):
 
     @property
     def supports_breeze_away(self) -> bool:
-        return self._capabilities.has(AirConditioner.Capability.BREEZE_AWAY | AirConditioner.Capability.BREEZE_CONTROL)
+        return self._capabilities.has(
+            AirConditioner.Capability.BREEZE_AWAY
+            | AirConditioner.Capability.BREEZE_CONTROL
+        )
 
     @property
     def breeze_away(self) -> Optional[bool]:
@@ -986,12 +1127,17 @@ class AirConditioner(Device):
 
     @breeze_away.setter
     def breeze_away(self, enable: bool) -> None:
-        self._breeze_mode = (AirConditioner.BreezeMode.BREEZE_AWAY if enable
-                             else AirConditioner.BreezeMode.OFF)
+        self._breeze_mode = (
+            AirConditioner.BreezeMode.BREEZE_AWAY
+            if enable
+            else AirConditioner.BreezeMode.OFF
+        )
 
         self._updated_properties.add(
-            PropertyId.BREEZE_CONTROL if self._capabilities.has(AirConditioner.Capability.BREEZE_CONTROL)
-            else PropertyId.BREEZE_AWAY)
+            PropertyId.BREEZE_CONTROL
+            if self._capabilities.has(AirConditioner.Capability.BREEZE_CONTROL)
+            else PropertyId.BREEZE_AWAY
+        )
 
     @property
     def supports_breeze_mild(self) -> bool:
@@ -1003,14 +1149,20 @@ class AirConditioner(Device):
 
     @breeze_mild.setter
     def breeze_mild(self, enable: bool) -> None:
-        self._breeze_mode = (AirConditioner.BreezeMode.BREEZE_MILD if enable
-                             else AirConditioner.BreezeMode.OFF)
+        self._breeze_mode = (
+            AirConditioner.BreezeMode.BREEZE_MILD
+            if enable
+            else AirConditioner.BreezeMode.OFF
+        )
 
         self._updated_properties.add(PropertyId.BREEZE_CONTROL)
 
     @property
     def supports_breezeless(self) -> bool:
-        return self._capabilities.has(AirConditioner.Capability.BREEZELESS | AirConditioner.Capability.BREEZE_CONTROL)
+        return self._capabilities.has(
+            AirConditioner.Capability.BREEZELESS
+            | AirConditioner.Capability.BREEZE_CONTROL
+        )
 
     @property
     def breezeless(self) -> Optional[bool]:
@@ -1018,12 +1170,17 @@ class AirConditioner(Device):
 
     @breezeless.setter
     def breezeless(self, enable: bool) -> None:
-        self._breeze_mode = (AirConditioner.BreezeMode.BREEZELESS if enable
-                             else AirConditioner.BreezeMode.OFF)
+        self._breeze_mode = (
+            AirConditioner.BreezeMode.BREEZELESS
+            if enable
+            else AirConditioner.BreezeMode.OFF
+        )
 
         self._updated_properties.add(
-            PropertyId.BREEZE_CONTROL if self._capabilities.has(AirConditioner.Capability.BREEZE_CONTROL)
-            else PropertyId.BREEZELESS)
+            PropertyId.BREEZE_CONTROL
+            if self._capabilities.has(AirConditioner.Capability.BREEZE_CONTROL)
+            else PropertyId.BREEZELESS
+        )
 
     @property
     def supported_swing_modes(self) -> list[SwingMode]:
@@ -1315,13 +1472,19 @@ class AirConditioner(Device):
     def enable_energy_usage_requests(self, enable: bool) -> None:
         self._request_energy_usage = enable
 
-    def get_total_energy_usage(self, format: EnergyDataFormat = EnergyDataFormat.BCD) -> Optional[float]:
+    def get_total_energy_usage(
+        self, format: EnergyDataFormat = EnergyDataFormat.BCD
+    ) -> Optional[float]:
         return self._total_energy_usage[format]
 
-    def get_current_energy_usage(self, format: EnergyDataFormat = EnergyDataFormat.BCD) -> Optional[float]:
+    def get_current_energy_usage(
+        self, format: EnergyDataFormat = EnergyDataFormat.BCD
+    ) -> Optional[float]:
         return self._current_energy_usage[format]
 
-    def get_real_time_power_usage(self, format: EnergyDataFormat = EnergyDataFormat.BCD) -> Optional[float]:
+    def get_real_time_power_usage(
+        self, format: EnergyDataFormat = EnergyDataFormat.BCD
+    ) -> Optional[float]:
         return self._real_time_power_usage[format]
 
     @property
@@ -1382,6 +1545,22 @@ class AirConditioner(Device):
         return self._error_code
 
     @property
+    def enable_group1_data_requests(self) -> bool:
+        return self._request_group1_data
+
+    @enable_group1_data_requests.setter
+    def enable_group1_data_requests(self, enable: bool) -> None:
+        self._request_group1_data = enable
+
+    @property
+    def enable_group2_data_requests(self) -> bool:
+        return self._request_group2_data
+
+    @enable_group2_data_requests.setter
+    def enable_group2_data_requests(self, enable: bool) -> None:
+        self._request_group2_data = enable
+
+    @property
     def enable_group5_data_requests(self) -> bool:
         return self._request_group5_data
 
@@ -1410,56 +1589,115 @@ class AirConditioner(Device):
         self._out_silent = enabled
         self._updated_properties.add(PropertyId.OUT_SILENT)
 
+    @property
+    def compressor_frequency(self) -> Optional[int]:
+        return self._compressor_frequency
+
+    @property
+    def outdoor_unit_total_current(self) -> Optional[int]:
+        return self._outdoor_unit_total_current
+
+    @property
+    def outdoor_unit_voltage(self) -> Optional[int]:
+        return self._outdoor_unit_voltage
+
+    @property
+    def T1(self) -> Optional[float]:
+        return self._T1
+
+    @property
+    def T2(self) -> Optional[float]:
+        return self._T2
+
+    @property
+    def T3(self) -> Optional[float]:
+        return self._T3
+
+    @property
+    def T4(self) -> Optional[float]:
+        return self._T4
+
+    @property
+    def TP(self) -> Optional[int]:
+        return self._TP
+
+    @property
+    def indoor_fan_speed(self) -> Optional[int]:
+        return self._indoor_fan_speed
+
+    @property
+    def outdoor_unit_power(self) -> Optional[float]:
+        return self._outdoor_unit_power
+
+    @property
+    def louver_angle(self) -> Optional[int]:
+        return self._louver_angle
+
     def to_dict(self) -> dict:
-        return {**super().to_dict(), **{
-            "power": self.power_state,
-            "mode": self.operational_mode,
-            "fan_speed": self.fan_speed,
-            "swing_mode": self.swing_mode,
-            "horizontal_swing_angle": self.horizontal_swing_angle,
-            "vertical_swing_angle": self.vertical_swing_angle,
-            "cascade_mode": self.cascade_mode,
-            "target_temperature": self.target_temperature,
-            "indoor_temperature": self.indoor_temperature,
-            "outdoor_temperature": self.outdoor_temperature,
-            "target_humidity": self.target_humidity,
-            "indoor_humidity": self.indoor_humidity,
-            "eco": self.eco,
-            "turbo": self.turbo,
-            "freeze_protection": self.freeze_protection,
-            "sleep": self.sleep,
-            "display_on": self.display_on,
-            "beep": self.beep,
-            "fahrenheit": self.fahrenheit,
-            "filter_alert": self.filter_alert,
-            "follow_me": self.follow_me,
-            "purifier": self.purifier,
-            "self_clean": self.self_clean_active,
-            "total_energy_usage": self.get_total_energy_usage(),
-            "current_energy_usage": self.get_current_energy_usage(),
-            "real_time_power_usage": self.get_real_time_power_usage(),
-            "rate_select": self.rate_select,
-            "aux_mode": self.aux_mode,
-            "error_code": self.error_code,
-            "defrost": self.defrost_active,
-            "out_silent": self.out_silent,
-            "fresh_air": self.fresh_air,
-            "fresh_air_fan_speed": self.fresh_air_fan_speed,
-            "power_save": self.power_save,
-            "low_frequency_fan": self.low_frequency_fan,
-            "cosy_sleep_mode": self.cosy_sleep_mode,
-            "comfort_sleep": self.comfort_sleep,
-            "diy": self.diy,
-            "smart_eye": self.smart_eye,
-            "ventilation": self.ventilation,
-            "anti_cold": self.anti_cold,
-            "night_light": self.night_light,
-            "pmv": self.pmv,
-            "cool_wind": self.cool_wind,
-            "natural_wind": self.natural_wind,
-            "child_sleep": self.child_sleep,
-            "water_full": self.water_full,
-        }}
+        return {
+            **super().to_dict(),
+            **{
+                "power": self.power_state,
+                "mode": self.operational_mode,
+                "fan_speed": self.fan_speed,
+                "swing_mode": self.swing_mode,
+                "horizontal_swing_angle": self.horizontal_swing_angle,
+                "vertical_swing_angle": self.vertical_swing_angle,
+                "cascade_mode": self.cascade_mode,
+                "target_temperature": self.target_temperature,
+                "indoor_temperature": self.indoor_temperature,
+                "outdoor_temperature": self.outdoor_temperature,
+                "target_humidity": self.target_humidity,
+                "indoor_humidity": self.indoor_humidity,
+                "eco": self.eco,
+                "turbo": self.turbo,
+                "freeze_protection": self.freeze_protection,
+                "sleep": self.sleep,
+                "display_on": self.display_on,
+                "beep": self.beep,
+                "fahrenheit": self.fahrenheit,
+                "filter_alert": self.filter_alert,
+                "follow_me": self.follow_me,
+                "purifier": self.purifier,
+                "self_clean": self.self_clean_active,
+                "total_energy_usage": self.get_total_energy_usage(),
+                "current_energy_usage": self.get_current_energy_usage(),
+                "real_time_power_usage": self.get_real_time_power_usage(),
+                "rate_select": self.rate_select,
+                "aux_mode": self.aux_mode,
+                "error_code": self.error_code,
+                "defrost": self.defrost_active,
+                "out_silent": self.out_silent,
+                "fresh_air": self.fresh_air,
+                "fresh_air_fan_speed": self.fresh_air_fan_speed,
+                "power_save": self.power_save,
+                "low_frequency_fan": self.low_frequency_fan,
+                "cosy_sleep_mode": self.cosy_sleep_mode,
+                "comfort_sleep": self.comfort_sleep,
+                "diy": self.diy,
+                "smart_eye": self.smart_eye,
+                "ventilation": self.ventilation,
+                "anti_cold": self.anti_cold,
+                "night_light": self.night_light,
+                "pmv": self.pmv,
+                "cool_wind": self.cool_wind,
+                "natural_wind": self.natural_wind,
+                "child_sleep": self.child_sleep,
+                "water_full": self.water_full,
+                "outdoor_fan_speed": self.outdoor_fan_speed,
+                "compressor_frequency": self.compressor_frequency,
+                "outdoor_unit_total_current": self.outdoor_unit_total_current,
+                "outdoor_unit_voltage": self.outdoor_unit_voltage,
+                "T1": self.T1,
+                "T2": self.T2,
+                "T3": self.T3,
+                "T4": self.T4,
+                "TP": self.TP,
+                "indoor_fan_speed": self.indoor_fan_speed,
+                "outdoor_unit_power": self.outdoor_unit_power,
+                "louver_angle": self.louver_angle,
+            },
+        }
 
     def capabilities_dict(self) -> dict:
         return {
@@ -1470,7 +1708,7 @@ class AirConditioner(Device):
             "supported_fan_speeds": self.supported_fan_speeds,
             "supported_aux_modes": self.supported_aux_modes,
             "supported_rate_selects": self.supported_rate_selects,
-            "additional_capabilities": list(self._capabilities.flags)
+            "additional_capabilities": list(self._capabilities.flags),
         }
 
     # Deprecated methods and properties
@@ -1542,17 +1780,29 @@ class AirConditioner(Device):
     @property
     @deprecated("get_total_energy_usage()")
     def total_energy_usage(self) -> Optional[float]:
-        format = AirConditioner.EnergyDataFormat.BINARY if self._use_binary_energy else AirConditioner.EnergyDataFormat.BCD
+        format = (
+            AirConditioner.EnergyDataFormat.BINARY
+            if self._use_binary_energy
+            else AirConditioner.EnergyDataFormat.BCD
+        )
         return self._total_energy_usage[format]
 
     @property
     @deprecated("get_current_energy_usage()")
     def current_energy_usage(self) -> Optional[float]:
-        format = AirConditioner.EnergyDataFormat.BINARY if self._use_binary_energy else AirConditioner.EnergyDataFormat.BCD
+        format = (
+            AirConditioner.EnergyDataFormat.BINARY
+            if self._use_binary_energy
+            else AirConditioner.EnergyDataFormat.BCD
+        )
         return self._current_energy_usage[format]
 
     @property
     @deprecated("get_real_time_power_usage()")
     def real_time_power_usage(self) -> Optional[float]:
-        format = AirConditioner.EnergyDataFormat.BINARY if self._use_binary_energy else AirConditioner.EnergyDataFormat.BCD
+        format = (
+            AirConditioner.EnergyDataFormat.BINARY
+            if self._use_binary_energy
+            else AirConditioner.EnergyDataFormat.BCD
+        )
         return self._real_time_power_usage[format]

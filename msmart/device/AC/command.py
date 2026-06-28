@@ -245,10 +245,11 @@ class GetEnergyUsageCommand(Command):
         return super().tobytes(payload)
 
 
-class GetGroup5Command(Command):
-    """Command to query group 5 data from device."""
+class GetGroupCommand(Command):
+    """Command to query group data from device."""
 
-    def __init__(self) -> None:
+    def __init__(self, group: Int) -> None:
+        self._group = group
         super().__init__(frame_type=FrameType.QUERY)
 
     def tobytes(self) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
@@ -257,7 +258,7 @@ class GetGroup5Command(Command):
         payload[0] = 0x41
         payload[1] = 0x21
         payload[2] = 0x01
-        payload[3] = 0x45
+        payload[3] = 0x40 | self._group
 
         return super().tobytes(payload)
 
@@ -589,10 +590,18 @@ class Response():
             elif response_id == ResponseId.GROUP_DATA:
                 # Response type depends on an additional "group" byte
                 group = frame_mv[13] & 0xF
-                if group == 4:
+                if group == 1:
+                    response_class = Group1Response
+                elif group == 2:
+                    response_class = Group2Response
+                elif group == 4:
                     response_class = EnergyUsageResponse
                 elif group == 5:
                     response_class = Group5Response
+                elif group == 7:
+                    response_class = Group7Response
+                elif group == 11:
+                    response_class = Group11Response
 
             # Validate the payload CRC
             # ...except for properties which certain devices send invalid CRCs
@@ -1212,6 +1221,58 @@ class PropertiesResponse(Response):
     def get_property(self, id: PropertyId) -> Optional[Any]:
         return self._properties.get(id, None)
 
+class Group1Response(Response):
+    """Group 1 response."""
+
+    def __init__(self, payload: memoryview) -> None:
+        super().__init__(payload)
+
+        self.compressor_frequency = None
+        #self.indoor_fan_frequency = None
+        #self.compressor_current = None
+        self.outdoor_unit_total_current = None
+        self.outdoor_unit_voltage = None
+        #self.indoor_unit_operating_mode = None
+        self.T1 = None
+        self.T2 = None
+        self.T3 = None
+        self.T4 = None
+        self.TP = None
+
+        self._parse(payload)
+
+    def _parse(self, payload: memoryview) -> None:
+
+        self.compressor_frequency = payload[4]
+        #self.indoor_fan_frequency = payload[5]
+        #self.compressor_current = payload[6]
+        self.outdoor_unit_total_current = payload[7]
+        self.outdoor_unit_voltage = payload[8]
+        #self.indoor_unit_operating_mode = payload[9]
+
+        self.T1 = (payload[10] - 30) / 2
+        self.T2 = (payload[11] - 30) / 2
+        self.T3 = (payload[12] - 50) / 2
+        self.T4 = (payload[13] - 50) / 2
+
+        #ucPQTempTab = [-48,-48,-33,-25,-20,-16,-13,-10,-7,-4,-2,0,2,3,5,6,8,9,11,12,13,14,15,16,17,18,19,20,21,22,23,24,24,25,26,27,27,28,29,30,30,31,32,32,33,34,34,35,36,36,37,37,38,39,39,40,40,41,41,42,42,43,44,44,45,45,46,46,47,47,48,48,49,49,50,50,51,51,52,52,53,53,54,54,55,55,56,56,56,57,57,58,58,59,59,60,60,61,61,62,62,63,63,63,64,64,65,65,66,66,67,67,68,68,69,69,69,70,70,71,71,72,72,73,73,74,74,75,75,76,76,76,77,77,78,78,79,79,80,80,81,81,82,82,83,83,84,84,85,85,86,86,87,87,88,88,89,90,90,91,91,92,92,93,93,94,95,95,96,96,97,98,98,99,99,100,101,101,102,103,103,104,105,105,106,107,107,108,109,109,110,111,112,112,113,114,115,116,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,135,136,137,138,140,141,142,144,145,147,148,150,152,153,155,157,159,161,163,165,168,170,173,175,178,181,185,188,192,196,201,206,211,218,225,233,243,254,255,255,255,255,255]
+        self.TP = payload[14] #ucPQTempTab[payload[14]]
+
+class Group2Response(Response):
+    """Group 2 response."""
+
+    def __init__(self, payload: memoryview) -> None:
+        super().__init__(payload)
+
+        #self.indoor_target_fan_speed = None
+        self.indoor_fan_speed = None
+
+        self._parse(payload)
+
+    def _parse(self, payload: memoryview) -> None:
+
+        #self.indoor_target_fan_speed = payload[4] * 8
+        self.indoor_fan_speed = payload[5] * 8
 
 class EnergyUsageResponse(Response):
     """Response to a GetEnergyUsageCommand."""
@@ -1305,3 +1366,31 @@ class Group5Response(Response):
         self.outdoor_fan_speed = 8 * payload[8]
 
         self.defrost = bool(payload[10])
+
+class Group7Response(Response):
+    """Group 7 response."""
+
+    def __init__(self, payload: memoryview) -> None:
+        super().__init__(payload)
+
+        self.outdoor_unit_power = None
+
+        self._parse(payload)
+
+    def _parse(self, payload: memoryview) -> None:
+
+        self.outdoor_unit_power = payload[10] + 256 * payload[11]
+
+class Group11Response(Response):
+    """Group 11 response."""
+
+    def __init__(self, payload: memoryview) -> None:
+        super().__init__(payload)
+
+        self.louver_angle = None
+
+        self._parse(payload)
+
+    def _parse(self, payload: memoryview) -> None:
+
+        self.louver_angle = payload[9]
