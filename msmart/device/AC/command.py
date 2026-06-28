@@ -79,6 +79,7 @@ class PropertyId(IntEnum):
     BREEZELESS = 0x0018  # AKA "No Wind Sense"
     BUZZER = 0x001A
     SELF_CLEAN = 0x0039
+    PARENT_CONTROL = 0x0051  # Child lock
     BREEZE_AWAY = 0x0042  # AKA "Prevent Straight Wind"
     BREEZE_CONTROL = 0x0043  # AKA "FA No Wind Sense"
     RATE_SELECT = 0x0048
@@ -87,6 +88,7 @@ class PropertyId(IntEnum):
     JET_COOL = 0x0067  # AKA "Flash Cool"
     OUT_SILENT = 0x00CD  # Portasplit outdoor silent mode
     IECO = 0x00E3
+    IN_CODE = 0x00AB  # Indoor unit code/version string (read-only)
     ANION = 0x021E
 
     @property
@@ -100,8 +102,10 @@ class PropertyId(IntEnum):
             PropertyId.CASCADE,
             PropertyId.FRESH_AIR,
             PropertyId.IECO,
+            PropertyId.IN_CODE,
             PropertyId.JET_COOL,
             PropertyId.OUT_SILENT,
+            PropertyId.PARENT_CONTROL,
             PropertyId.RATE_SELECT,
             PropertyId.SELF_CLEAN,
             PropertyId.SWING_LR_ANGLE,
@@ -130,6 +134,15 @@ class PropertyId(IntEnum):
             return bool(data[1])
         elif self == PropertyId.OUT_SILENT:
             return data[0] == 3
+        elif self == PropertyId.PARENT_CONTROL:
+            # data[0] - on/off, data[1] - temp_up limit, data[2] - temp_down limit
+            return (bool(data[0]), data[1], data[2])
+        elif self == PropertyId.IN_CODE:
+            # ASCII string: 16-char indoor code at [8:24], 4-char version at [24:28]
+            if len(data) < 28:
+                return None
+            version = bytes(data[24:28]).decode("ascii", errors="replace")
+            return version if version.isprintable() else None
         else:
             return data[0]
 
@@ -152,6 +165,10 @@ class PropertyId(IntEnum):
             return bytes([0, 1, args[0]]) + bytes(10)
         elif self == PropertyId.OUT_SILENT:
             return bytes([3 if args[0] else 0])
+        elif self == PropertyId.PARENT_CONTROL:
+            # args[0] is a (on, temp_up, temp_down) tuple; trailing 0xFF padding
+            on, temp_up, temp_down = args[0]
+            return bytes([1 if on else 0, temp_up & 0xFF, temp_down & 0xFF, 0xFF, 0xFF])
         else:
             return bytes(args[0:1])
 

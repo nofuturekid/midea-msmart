@@ -160,6 +160,11 @@ class AirConditioner(Device):
         PropertyId.IECO: lambda s: s._ieco,
         PropertyId.JET_COOL: lambda s: s._flash_cool,
         PropertyId.OUT_SILENT: lambda s: s._out_silent,
+        PropertyId.PARENT_CONTROL: lambda s: (
+            s._parent_control,
+            s._parent_control_temp_up,
+            s._parent_control_temp_down,
+        ),
         PropertyId.RATE_SELECT: lambda s: s._rate_select,
         PropertyId.SWING_LR_ANGLE: lambda s: s._horizontal_swing_angle,
         PropertyId.SWING_UD_ANGLE: lambda s: s._vertical_swing_angle,
@@ -209,6 +214,15 @@ class AirConditioner(Device):
         self._ieco = False
         self._flash_cool = False
         self._out_silent = False
+
+        # Child lock (parent control) plus its reported temp limits, preserved
+        # so toggling on/off re-sends the limits unchanged.
+        self._parent_control = False
+        self._parent_control_temp_up = 0xFF
+        self._parent_control_temp_down = 0xFF
+
+        # Read-only indoor unit code/version string
+        self._in_version = None
 
         self._horizontal_swing_angle = AirConditioner.SwingAngle.OFF
         self._vertical_swing_angle = AirConditioner.SwingAngle.OFF
@@ -460,6 +474,16 @@ class AirConditioner(Device):
             if (value := res.get_property(PropertyId.OUT_SILENT)) is not None:
                 self._out_silent = value
 
+            if (value := res.get_property(PropertyId.PARENT_CONTROL)) is not None:
+                (
+                    self._parent_control,
+                    self._parent_control_temp_up,
+                    self._parent_control_temp_down,
+                ) = value
+
+            if (value := res.get_property(PropertyId.IN_CODE)) is not None:
+                self._in_version = value
+
         elif isinstance(res, Group1Response):
             _LOGGER.debug(
                 "Group 1 response payload from device %s: %s", self.id, res)
@@ -692,6 +716,12 @@ class AirConditioner(Device):
         # Rate select is a special case. It's property based but not controlled by a capability flag
         if self._supported_rate_selects != [AirConditioner.RateSelect.OFF]:
             self._supported_properties.add(PropertyId.RATE_SELECT)
+
+        # Child lock and the indoor code/version aren't advertised via a mapped
+        # capability flag; query them unconditionally. Unsupported devices simply
+        # return empty data which is ignored.
+        self._supported_properties.add(PropertyId.PARENT_CONTROL)
+        self._supported_properties.add(PropertyId.IN_CODE)
 
     async def _send_commands_get_responses(
         self, commands: Union[Command, list[Command]]
@@ -1603,6 +1633,21 @@ class AirConditioner(Device):
         self._updated_properties.add(PropertyId.OUT_SILENT)
 
     @property
+    def parent_control(self) -> Optional[bool]:
+        """Child lock state."""
+        return self._parent_control
+
+    @parent_control.setter
+    def parent_control(self, enabled: bool) -> None:
+        self._parent_control = enabled
+        self._updated_properties.add(PropertyId.PARENT_CONTROL)
+
+    @property
+    def in_version(self) -> Optional[str]:
+        """Indoor unit code/version string (read-only)."""
+        return self._in_version
+
+    @property
     def compressor_frequency(self) -> Optional[int]:
         return self._compressor_frequency
 
@@ -1689,6 +1734,8 @@ class AirConditioner(Device):
                 "error_code": self.error_code,
                 "defrost": self.defrost_active,
                 "out_silent": self.out_silent,
+                "parent_control": self.parent_control,
+                "in_version": self.in_version,
                 "fresh_air": self.fresh_air,
                 "fresh_air_fan_speed": self.fresh_air_fan_speed,
                 "power_save": self.power_save,
