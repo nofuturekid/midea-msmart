@@ -62,6 +62,107 @@ class TestCommand(unittest.TestCase):
         self.assertEqual(frame[9], FrameType.QUERY)
 
 
+class TestSetStateCommand(unittest.TestCase):
+    """Test building of set state commands, focused on timer encoding."""
+
+    def test_encode_timer(self) -> None:
+        """Test relative timer minute-to-byte encoding."""
+        # Disabled
+        self.assertEqual(SetStateCommand._encode_timer(0), (0x7F, 0))
+        self.assertEqual(SetStateCommand._encode_timer(-5), (0x7F, 0))
+
+        # Whole quarter-hour values have no remainder
+        self.assertEqual(SetStateCommand._encode_timer(30), (0x82, 0))
+        self.assertEqual(SetStateCommand._encode_timer(90), (0x86, 0))
+
+        # Sub-15-minute remainder is returned separately
+        self.assertEqual(SetStateCommand._encode_timer(77), (0x85, 2))
+
+        # Values are clamped to 24 hours
+        self.assertEqual(SetStateCommand._encode_timer(99999), (0xE0, 0))
+
+    def test_decode_timer(self) -> None:
+        """Test relative timer byte-to-minute decoding."""
+        # Disabled (enable bit not set)
+        self.assertEqual(StateResponse._decode_timer(0x7F, 0), 0)
+
+        # Inverse of encode (remainder is supplied as the stored 15-x nibble)
+        self.assertEqual(StateResponse._decode_timer(0x82, 15), 30)
+        self.assertEqual(StateResponse._decode_timer(0x86, 15), 90)
+        self.assertEqual(StateResponse._decode_timer(0x85, 13), 77)
+
+    def test_timer_round_trip(self) -> None:
+        """Test that encoding then decoding a timer is lossless within range."""
+        for minutes in [0, 1, 14, 15, 16, 30, 45, 60, 77, 90, 123, 600, 1439, 1440]:
+            timer_byte, remainder = SetStateCommand._encode_timer(minutes)
+            decoded = StateResponse._decode_timer(timer_byte, 15 - remainder)
+            self.assertEqual(decoded, minutes,
+                             msg=f"Round-trip failed for {minutes} minutes.")
+
+    def test_tobytes_timers(self) -> None:
+        """Test that timers are encoded into the correct command body bytes."""
+        # Active timers: power-on 90 min, power-off 30 min
+        command = SetStateCommand()
+        command.on_timer = 90
+        command.off_timer = 30
+        body = command.tobytes()[10:-1]
+        self.assertEqual(body[4], 0x86)
+        self.assertEqual(body[5], 0x82)
+        self.assertEqual(body[6], 0xFF)
+
+        # Default (disabled) timers
+        command = SetStateCommand()
+        body = command.tobytes()[10:-1]
+        self.assertEqual(body[4], 0x7F)
+        self.assertEqual(body[5], 0x7F)
+
+    def test_tobytes_extended_toggles(self) -> None:
+        """Test that extended classic-protocol toggles pack into bytes 8/9/10."""
+        command = SetStateCommand()
+        # Start from a clean slate (defaults set eco/fahrenheit/beep)
+        command.eco = False
+        command.fahrenheit = False
+        command.beep_on = False
+
+        command.power_save = True          # byte 8 bit 3
+        command.low_frequency_fan = True   # byte 8 bit 4
+        command.cosy_sleep_mode = 3        # byte 8 bits 0-1
+        command.smart_eye = True           # byte 9 bit 0
+        command.ventilation = True         # byte 9 bit 1
+        command.diy = True                 # byte 9 bit 2
+        command.comfort_sleep = True       # byte 9 bit 6
+        command.anti_cold = True           # byte 10 bit 3
+        command.night_light = True         # byte 10 bit 4
+        command.pmv = True                 # byte 10 bit 5
+
+        body = command.tobytes()[10:-1]
+        self.assertEqual(body[8], 0x03 | 0x08 | 0x10)
+        self.assertEqual(body[9], 0x01 | 0x02 | 0x04 | 0x40)
+        self.assertEqual(body[10], 0x08 | 0x10 | 0x20)
+
+    def test_tobytes_filter_reset(self) -> None:
+        """Test that filter run-time resets set the correct body bits."""
+        # Common (AC) filter reset -> body byte[10] bit 0x80
+        command = SetStateCommand()
+        command.common_filter_reset = True
+        body = command.tobytes()[10:-1]
+        self.assertEqual(body[10] & 0x80, 0x80)
+        self.assertEqual(body[22] & 0x08, 0x00)
+
+        # Fresh-air filter reset -> body byte[22] bit 0x08
+        command = SetStateCommand()
+        command.fresh_filter_reset = True
+        body = command.tobytes()[10:-1]
+        self.assertEqual(body[22] & 0x08, 0x08)
+        self.assertEqual(body[10] & 0x80, 0x00)
+
+        # Defaults leave both reset bits clear
+        command = SetStateCommand()
+        body = command.tobytes()[10:-1]
+        self.assertEqual(body[10] & 0x80, 0x00)
+        self.assertEqual(body[22] & 0x08, 0x00)
+
+
 class TestStateResponse(_TestResponseBase):
     """Test device state response messages."""
 
@@ -87,12 +188,91 @@ class TestStateResponse(_TestResponseBase):
         "aux_heat",
         "independent_aux_heat",
         "error_code",
+        "on_timer",
+        "off_timer",
+        "power_save",
+        "low_frequency_fan",
+        "cosy_sleep_mode",
+        "comfort_sleep",
+        "diy",
+        "smart_eye",
+        "ventilation",
+        "night_light",
+        "anti_cold",
+        "pmv",
+        "cool_wind",
+        "natural_wind",
+        "child_sleep",
+        "water_full",
     ]
 
     def _test_response(self, msg) -> StateResponse:
         resp = self._test_build_response(msg)
         self._test_check_attributes(resp, self.EXPECTED_ATTRS)
         return cast(StateResponse, resp)
+
+    def _build_with_timers(self, base: bytearray, on_byte: int, off_byte: int, minutes_byte: int) -> StateResponse:
+        """Build a StateResponse from a base payload with overridden timer bytes."""
+        payload = bytearray(base)
+        payload[4] = on_byte
+        payload[5] = off_byte
+        payload[6] = minutes_byte
+        with memoryview(bytes(payload)) as mv_payload:
+            return cast(StateResponse, StateResponse(mv_payload))
+
+    def test_timers(self) -> None:
+        """Test decoding of relative countdown timers."""
+        # Raw state response payload with disabled timers (bytes 4-6 = 7f 7f 00)
+        BASE = bytearray.fromhex(
+            "c00181667f7f003c0000006156050036000000000000004a")
+
+        # Disabled timers
+        resp = self._build_with_timers(BASE, 0x7F, 0x7F, 0x00)
+        self.assertEqual(resp.on_timer, 0)
+        self.assertEqual(resp.off_timer, 0)
+
+        # Power-on timer 90 min, power-off timer 30 min (no sub-15-minute remainder)
+        resp = self._build_with_timers(BASE, 0x86, 0x82, 0xFF)
+        self.assertEqual(resp.on_timer, 90)
+        self.assertEqual(resp.off_timer, 30)
+
+        # Power-on timer 77 min (2 minute remainder), power-off disabled
+        resp = self._build_with_timers(BASE, 0x85, 0x7F, 0xD0)
+        self.assertEqual(resp.on_timer, 77)
+        self.assertEqual(resp.off_timer, 0)
+
+    def test_extended_features(self) -> None:
+        """Test decoding of extended features (bytes 8/9/10/16, per praser0xC0)."""
+        BASE = bytearray.fromhex(
+            "c00181667f7f003c0000006156050036000000000000004a")
+
+        payload = bytearray(BASE)
+        # Byte 8: cosy sleep level 3, power save, low-frequency fan
+        payload[8] = 0x03 | 0x08 | 0x10
+        # Byte 9: child sleep, natural wind, diy, comfort sleep, smart eye
+        payload[9] = 0x01 | 0x02 | 0x04 | 0x40 | 0x80
+        # Byte 10: ventilation, night light, anti-cold, pmv, cool wind
+        payload[10] = 0x08 | 0x10 | 0x20 | 0x40 | 0x80
+        # Byte 16: water tank full error code
+        payload[16] = 38
+
+        with memoryview(bytes(payload)) as mv:
+            resp = cast(StateResponse, StateResponse(mv))
+
+        self.assertEqual(resp.cosy_sleep_mode, 3)
+        self.assertTrue(resp.power_save)
+        self.assertTrue(resp.low_frequency_fan)
+        self.assertTrue(resp.child_sleep)
+        self.assertTrue(resp.natural_wind)
+        self.assertTrue(resp.diy)
+        self.assertTrue(resp.comfort_sleep)
+        self.assertTrue(resp.smart_eye)
+        self.assertTrue(resp.ventilation)
+        self.assertTrue(resp.night_light)
+        self.assertTrue(resp.anti_cold)
+        self.assertTrue(resp.pmv)
+        self.assertTrue(resp.cool_wind)
+        self.assertTrue(resp.water_full)
 
     def test_message_checksum(self) -> None:
         # https://github.com/mill1000/midea-ac-py/issues/11#issuecomment-1650647625
@@ -1057,6 +1237,10 @@ class TestSetPropertiesCommand(unittest.TestCase):
             (PropertyId.CASCADE, 1): bytes([1, 1]),
             (PropertyId.CASCADE, 2): bytes([1, 2]),
 
+            # Fresh air: 3 bytes switch, fan_speed, temp
+            (PropertyId.FRESH_AIR, (True, 60)): bytes([1, 60, 0]),
+            (PropertyId.FRESH_AIR, (False, 0)): bytes([0, 0, 0]),
+
             # Out Silent: 0x03 - On, 0x00 - Off
             (PropertyId.OUT_SILENT, True): bytes([0x03]),
             (PropertyId.OUT_SILENT, False): bytes([0x00]),
@@ -1124,6 +1308,10 @@ class TestPropertiesResponse(_TestResponseBase):
             (PropertyId.CASCADE, bytes([0x00, 0x00])): 0,
             (PropertyId.CASCADE, bytes([0x01, 0x01])): 1,
             (PropertyId.CASCADE, bytes([0x01, 0x02])): 2,
+
+            # Fresh air: 3 bytes switch, fan_speed, temp -> (on, fan_speed)
+            (PropertyId.FRESH_AIR, bytes([0x01, 60, 22])): (True, 60),
+            (PropertyId.FRESH_AIR, bytes([0x00, 0x00, 0x00])): (False, 0),
 
             # Out Silent: 0x03 - On, 0x00 - Off
             (PropertyId.OUT_SILENT, bytes([0x03])): True,

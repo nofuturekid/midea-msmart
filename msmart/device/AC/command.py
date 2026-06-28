@@ -98,6 +98,7 @@ class PropertyId(IntEnum):
             PropertyId.BREEZELESS,
             PropertyId.BUZZER,
             PropertyId.CASCADE,
+            PropertyId.FRESH_AIR,
             PropertyId.IECO,
             PropertyId.JET_COOL,
             PropertyId.OUT_SILENT,
@@ -121,6 +122,9 @@ class PropertyId(IntEnum):
         elif self == PropertyId.CASCADE:
             # data[0] - wind_around, data[1] - wind_around_ud
             return data[1] if data[0] else 0
+        elif self == PropertyId.FRESH_AIR:
+            # data[0] - switch, data[1] - fan speed (0-100), data[2] - temp
+            return (bool(data[0]), data[1])
         elif self == PropertyId.IECO:
             # data[0] - ieco_number, data[1] - ieco_switch
             return bool(data[1])
@@ -139,6 +143,10 @@ class PropertyId(IntEnum):
         elif self == PropertyId.CASCADE:
             # data[0] - wind_around, data[1] - wind_around_ud
             return bytes([1 if args[0] else 0, args[0]])
+        elif self == PropertyId.FRESH_AIR:
+            # args[0] is a (power, fan_speed) tuple
+            power, fan_speed = args[0]
+            return bytes([1 if power else 0, fan_speed & 0xFF, 0])
         elif self == PropertyId.IECO:
             # ieco_frame, ieco_number, ieco_switch, ...
             return bytes([0, 1, args[0]]) + bytes(10)
@@ -278,6 +286,59 @@ class SetStateCommand(Command):
         self.force_aux_heat = False
         self.independent_aux_heat = False
 
+        # Relative countdown timers in minutes. 0 disables the timer.
+        self.on_timer = 0
+        self.off_timer = 0
+        # "timingIsValid" flag (bit 7 of the fan-speed byte). The unit only
+        # applies the on/off timer bytes in a frame when this bit is set. It
+        # must be set whenever the timers are being changed (including cleared),
+        # and left clear otherwise so a running countdown is not reset by an
+        # unrelated control change.
+        self.timer_valid = False
+
+        # Extended classic-protocol toggles (bits from composeStandardSet)
+        self.power_save = False
+        self.low_frequency_fan = False
+        self.cosy_sleep_mode = 0
+        self.comfort_sleep = False
+        self.diy = False
+        self.smart_eye = False
+        self.ventilation = False
+        self.anti_cold = False
+        self.night_light = False
+        self.pmv = False
+
+        # One-shot filter run-time reset flags. These are momentary actions (not
+        # persisted device state) used to clear the accumulated filter run time.
+        # Bits are taken from the device's authoritative jsonToData encoder:
+        #   common (AC) filter -> body byte[10] |= 0x80
+        #   fresh-air filter   -> body byte[22] |= 0x08
+        self.common_filter_reset = False
+        self.fresh_filter_reset = False
+
+    @staticmethod
+    def _encode_timer(minutes: int) -> tuple[int, int]:
+        """Encode a relative countdown timer into its timer byte and sub-15-minute remainder.
+
+        Returns a tuple of (timer_byte, remainder_minutes). A value of 0 (or less)
+        disables the timer (0x7F) and yields a 0 remainder. The remainder (0-14) is
+        the minute part not captured by the quarter-hour step, and is used to build
+        the shared minutes byte.
+        """
+        if minutes <= 0:
+            return 0x7F, 0
+
+        # Hours use a 5-bit field, so clamp to the maximum representable value
+        minutes = min(minutes, 24 * 60)
+
+        hours = minutes // 60
+        step = (minutes % 60) // 15  # Quarter hours, 0-3
+        remainder = (minutes % 60) % 15  # 0-14
+
+        # Bit 7 enables the timer, bits 2-6 hold the hours, bits 0-1 the quarter hours
+        timer_byte = 0x80 | (hours << 2) | step
+        return timer_byte, remainder
+
     def tobytes(self) -> bytes:  # pyright: ignore[reportIncompatibleMethodOverride] # nopep8
         # Build beep and power status bytes
         beep = 0x40 if self.beep_on else 0
@@ -326,8 +387,41 @@ class SetStateCommand(Command):
         # Build freeze protection byte
         freeze_protect = 0x80 if self.freeze_protection else 0
 
-        # Build independent aux heat
+        # Build independent aux heat byte. The fresh-air filter run-time reset
+        # is a momentary action that shares this byte (bit 0x08) per the device
+        # encoder; it is only ever set during an explicit reset action.
         independent_aux_heat = 0x08 if self.independent_aux_heat else 0
+        independent_aux_heat |= 0x08 if self.fresh_filter_reset else 0
+
+        # Build relative countdown timer bytes
+        on_timer_byte, on_timer_remainder = self._encode_timer(self.on_timer)
+        off_timer_byte, off_timer_remainder = self._encode_timer(self.off_timer)
+        # Shared minutes byte stores the inverted remainder in each nibble
+        timer_minutes = ((15 - on_timer_remainder) << 4) | (15 - off_timer_remainder)
+
+        # Byte 8 - follow-me + alt turbo, plus cosy sleep level (bits 0-1),
+        # power save (bit 3) and low-frequency fan (bit 4)
+        byte_8 = follow_me | turbo_alt
+        byte_8 |= self.cosy_sleep_mode & 0x03
+        byte_8 |= 0x08 if self.power_save else 0
+        byte_8 |= 0x10 if self.low_frequency_fan else 0
+
+        # Byte 9 - eco/purifier/aux, plus smart eye (bit 0), ventilation/chgOfAir
+        # (bit 1), diy (bit 2) and comfort sleep switch (bit 6)
+        byte_9 = eco | purifier | force_aux_heat | aux_heat
+        byte_9 |= 0x01 if self.smart_eye else 0
+        byte_9 |= 0x02 if self.ventilation else 0
+        byte_9 |= 0x04 if self.diy else 0
+        byte_9 |= 0x40 if self.comfort_sleep else 0
+
+        # Byte 10 - sleep/turbo/fahrenheit, plus anti-cold (bit 3), night light
+        # (bit 4) and pmv (bit 5). NB: these differ from the status byte[10] bits.
+        byte_10 = sleep | turbo | fahrenheit
+        byte_10 |= 0x08 if self.anti_cold else 0
+        byte_10 |= 0x10 if self.night_light else 0
+        byte_10 |= 0x20 if self.pmv else 0
+        # Common (AC) filter run-time reset is a momentary action on bit 0x80.
+        byte_10 |= 0x80 if self.common_filter_reset else 0
 
         return super().tobytes(bytes([
             # Set state
@@ -336,18 +430,19 @@ class SetStateCommand(Command):
             self.CONTROL_SOURCE | beep | power,
             # Temperature and operational mode
             temperature | mode,
-            # Fan speed
-            self.fan_speed,
-            # Timer
-            0x7F, 0x7F, 0x00,
+            # Fan speed, with the timingIsValid flag in bit 7. Without this bit
+            # set the unit ignores the on/off timer bytes below.
+            (0x80 if self.timer_valid else 0) | (self.fan_speed & 0x7F),
+            # Timer (power-on, power-off, shared sub-15-minute remainder)
+            on_timer_byte, off_timer_byte, timer_minutes,
             # Swing mode
             swing_mode,
-            # Follow me and alternate turbo mode
-            follow_me | turbo_alt,
-            # ECO mode, purifier/anion, and aux heat
-            eco | purifier | force_aux_heat | aux_heat,
-            # Sleep mode, turbo mode and fahrenheit
-            sleep | turbo | fahrenheit,
+            # Follow me, alt turbo, cosy sleep level, power save, low-freq fan
+            byte_8,
+            # ECO, purifier/anion, aux heat, smart eye, ventilation, diy, comfort sleep
+            byte_9,
+            # Sleep, turbo, fahrenheit, anti-cold, night light, pmv
+            byte_10,
             # Unknown
             0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00,
@@ -557,6 +652,7 @@ class CapabilitiesResponse(Response):
                 reader("fan_auto", lambda v: v in [4, 5, 6, 9]),
                 reader("fan_custom", get_value(1)),
             ],
+            CapabilityId.FRESH_AIR: reader("fresh_air", get_value(1)),
             CapabilityId.FILTER_REMIND: [
                 reader("filter_notice", lambda v: v in [1, 2, 4]),
                 reader("filter_clean", lambda v: v in [3, 4]),
@@ -705,6 +801,10 @@ class CapabilitiesResponse(Response):
     def anion(self) -> bool:
         return self._capabilities.get("anion", False)
 
+    @property
+    def fresh_air(self) -> bool:
+        return self._capabilities.get("fresh_air", False)
+
     # TODO rethink these properties for fan speed, operation mode and swing mode
     # Surely there's a better way than define props for each possible cap
     @property
@@ -823,8 +923,15 @@ class CapabilitiesResponse(Response):
 
     @property
     def filter_reminder(self) -> bool:
-        # TODO unsure of difference between filter_notice and filter_clean
-        return self._capabilities.get("filter_notice", False)
+        # The B5 FILTER_REMIND (0x0217) capability reports one of two filter
+        # behaviors (matching the app's praser): value in [1, 2, 4] is a
+        # passive "notice" type, value in [3, 4] is an active "clean" type.
+        # Both surface the same filter dirty/alert status bit (payload[13] &
+        # 0x20), so a device that reports either should expose the entity.
+        # Previously only "notice" was honored, which left "clean"-type units
+        # (value == 3) without a filter sensor.
+        return (self._capabilities.get("filter_notice", False)
+                or self._capabilities.get("filter_clean", False))
 
     @property
     def min_temperature(self) -> int:
@@ -895,7 +1002,49 @@ class StateResponse(Response):
         self.independent_aux_heat = None
         self.error_code = None
 
+        # Extended classic-protocol features. Bit positions are taken from the
+        # app's authoritative praser0xC0 (the previous commented guesses for
+        # byte[10] were wrong). These are writable via composeStandardSet.
+        self.power_save = None
+        self.low_frequency_fan = None
+        self.cosy_sleep_mode = None
+        self.comfort_sleep = None
+        self.diy = None
+        self.smart_eye = None
+        self.ventilation = None
+        self.night_light = None
+        self.anti_cold = None
+        self.pmv = None
+
+        # Read-only extended features (no classic 0x40 write path on this
+        # protocol - the app only writes them via an extended command).
+        self.cool_wind = None
+        self.natural_wind = None
+        self.child_sleep = None
+        self.water_full = None
+
+        # Relative countdown timers in minutes. 0 indicates the timer is disabled.
+        self.on_timer = 0
+        self.off_timer = 0
+
         self._parse(payload)
+
+    @staticmethod
+    def _decode_timer(timer_byte: int, remainder: int) -> int:
+        """Decode a timer byte and its sub-15-minute remainder into minutes.
+
+        Returns 0 when the timer is disabled (enable bit not set). Inverse of
+        SetStateCommand._encode_timer.
+        """
+        # Bit 7 indicates whether the timer is enabled
+        if not (timer_byte & 0x80):
+            return 0
+
+        hours = (timer_byte & 0x7C) >> 2
+        step = timer_byte & 0x3  # Quarter hours, 0-3
+        minutes = 15 - (remainder & 0xF)  # Inverted remainder, 0-14
+
+        return hours * 60 + step * 15 + minutes
 
     def _parse_temperature(self, data: int, decimals: float, fahrenheit: bool) -> Optional[float]:
         """Parse a temperature value from the payload using additional precision bits as needed."""
@@ -932,47 +1081,42 @@ class StateResponse(Response):
         # On my unit, Low == 40 (LED < 40), Med == 60 (LED < 60), High == 100 (LED < 100)
         self.fan_speed = payload[3] & 0x7F
 
-        # on_timer_value = payload[4]
-        # on_timer_minutes = payload[6]
-        # self.on_timer = {
-        #     'status': ((on_timer_value & 0x80) >> 7) > 0,
-        #     'hour': (on_timer_value & 0x7c) >> 2,
-        #     'minutes': (on_timer_value & 0x3) | ((on_timer_minutes & 0xf0) >> 4)
-        # }
-
-        # off_timer_value = payload[5]
-        # off_timer_minutes = payload[6]
-        # self.off_timer = {
-        #     'status': ((off_timer_value & 0x80) >> 7) > 0,
-        #     'hour': (off_timer_value & 0x7c) >> 2,
-        #     'minutes': (off_timer_value & 0x3) | (off_timer_minutes & 0xf)
-        # }
+        # Relative countdown timers. The shared minutes byte stores the inverted
+        # power-on remainder in the high nibble and power-off remainder in the low nibble.
+        self.on_timer = self._decode_timer(payload[4], (payload[6] & 0xF0) >> 4)
+        self.off_timer = self._decode_timer(payload[5], payload[6] & 0xF)
 
         # Swing mode
         self.swing_mode = payload[7] & 0xF
 
-        # self.cozy_sleep = payload[8] & 0x03
-        # self.save = (payload[8] & 0x08) > 0
-        # self.low_frequency_fan = (payload[8] & 0x10) > 0
+        # Byte 8: cosy sleep level (0-3), power save, low-frequency fan, turbo,
+        # independent aux heat and follow-me
+        self.cosy_sleep_mode = payload[8] & 0x03
+        self.power_save = bool(payload[8] & 0x08)
+        self.low_frequency_fan = bool(payload[8] & 0x10)
         self.turbo = bool(payload[8] & 0x20)
         self.independent_aux_heat = bool(payload[8] & 0x40)
         self.follow_me = bool(payload[8] & 0x80)
 
+        # Byte 9
+        self.child_sleep = bool(payload[9] & 0x01)
+        self.natural_wind = bool(payload[9] & 0x02)
+        self.diy = bool(payload[9] & 0x04)
+        self.aux_heat = bool(payload[9] & 0x08)
         self.eco = bool(payload[9] & 0x10)
         self.purifier = bool(payload[9] & 0x20)
-        # self.child_sleep = (payload[9] & 0x01) > 0
-        # self.exchange_air = (payload[9] & 0x02) > 0
-        # self.dry_clean = (payload[9] & 0x04) > 0
-        self.aux_heat = bool(payload[9] & 0x08)
-        # self.temp_unit = (payload[9] & 0x80) > 0
+        self.comfort_sleep = bool(payload[9] & 0x40)
+        self.smart_eye = bool(payload[9] & 0x80)  # localBodySense
 
-        self.sleep = bool(payload[10] & 0x1)
-        self.turbo |= bool(payload[10] & 0x2)
-        self.fahrenheit = bool(payload[10] & 0x4)
-        # self.catch_cold = (payload[10] & 0x08) > 0
-        # self.night_light = (payload[10] & 0x10) > 0
-        # self.peak_elec = (payload[10] & 0x20) > 0
-        # self.natural_fan = (payload[10] & 0x40) > 0
+        # Byte 10 (authoritative layout from praser0xC0)
+        self.sleep = bool(payload[10] & 0x01)
+        self.turbo |= bool(payload[10] & 0x02)
+        self.fahrenheit = bool(payload[10] & 0x04)
+        self.ventilation = bool(payload[10] & 0x08)  # chgOfAir
+        self.night_light = bool(payload[10] & 0x10)
+        self.anti_cold = bool(payload[10] & 0x20)  # againstCool
+        self.pmv = bool(payload[10] & 0x40)
+        self.cool_wind = bool(payload[10] & 0x80)  # coolWindMode
 
         # Decode temperatures using additional precision bits
         self.indoor_temperature = self._parse_temperature(
@@ -992,6 +1136,8 @@ class StateResponse(Response):
         self.display_on = (payload[14] != 0x70)
 
         self.error_code = payload[16]
+        # Water tank full is reported as a specific error code value
+        self.water_full = (payload[16] == 38)
 
         if len(payload) < 20:
             return

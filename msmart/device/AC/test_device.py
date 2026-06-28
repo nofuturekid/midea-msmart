@@ -103,6 +103,42 @@ class TestUpdateStateFromResponse(unittest.TestCase):
         self.assertEqual(device.fan_speed, AC.FanSpeed.AUTO)
         self.assertEqual(device.swing_mode, AC.SwingMode.VERTICAL)
 
+    def test_timer_properties(self) -> None:
+        """Test the timer property getters/setters and their clamping."""
+        device = AC(0, 0, 0)
+
+        # Default disabled
+        self.assertEqual(device.on_timer, 0)
+        self.assertEqual(device.off_timer, 0)
+
+        device.on_timer = 90
+        device.off_timer = 30
+        self.assertEqual(device.on_timer, 90)
+        self.assertEqual(device.off_timer, 30)
+
+        # Negative values are clamped to 0 (disabled)
+        device.on_timer = -10
+        self.assertEqual(device.on_timer, 0)
+
+        # Values above 24 hours are clamped
+        device.off_timer = 99999
+        self.assertEqual(device.off_timer, 24 * 60)
+
+    def test_timer_state_response(self) -> None:
+        """Test that timer state from a response is reflected on the device."""
+        # Raw state response with power-on 90 min and power-off 30 min timers
+        TEST_RESPONSE = bytearray.fromhex(
+            "c00181668682ff3c0000006156050036000000000000004a")
+
+        with memoryview(bytes(TEST_RESPONSE)) as mv_payload:
+            resp = StateResponse(mv_payload)
+
+        device = AC(0, 0, 0)
+        device._update_state(resp)
+
+        self.assertEqual(device.on_timer, 90)
+        self.assertEqual(device.off_timer, 30)
+
     def test_properties_response(self) -> None:
         """Test parsing of PropertiesResponse into device state."""
         # https://github.com/mill1000/midea-ac-py/issues/60#issuecomment-1936976587
@@ -606,6 +642,72 @@ class TestSetState(unittest.TestCase):
         # Assert correct property is being updated
         self.assertIn(PropertyId.CASCADE, device._updated_properties)
 
+    def test_properties_fresh_air(self) -> None:
+        """Test setting fresh air property."""
+
+        # Create dummy device with fresh air
+        device = AC(0, 0, 0)
+        device._capabilities.set(AC.Capability.FRESH_AIR)
+        self.assertTrue(device.supports_fresh_air)
+
+        # Enable fresh air and set a fan speed
+        device.fresh_air = True
+        device.fresh_air_fan_speed = 70
+
+        # Assert state is expected
+        self.assertEqual(device.fresh_air, True)
+        self.assertEqual(device.fresh_air_fan_speed, 70)
+
+        # Assert correct property is being updated and packs as (on, speed)
+        self.assertIn(PropertyId.FRESH_AIR, device._updated_properties)
+        self.assertEqual(device._PROPERTY_MAP[PropertyId.FRESH_AIR](device),
+                         (True, 70))
+
+        # Fan speed is clamped to 0-100
+        device.fresh_air_fan_speed = 250
+        self.assertEqual(device.fresh_air_fan_speed, 100)
+
+    def test_extended_toggles_apply_to_command(self) -> None:
+        """Test extended classic-protocol toggles flow into the SetStateCommand."""
+        device = AC(0, 0, 0)
+
+        device.power_save = True
+        device.low_frequency_fan = True
+        device.cosy_sleep_mode = 9  # clamped to 3
+        device.comfort_sleep = True
+        device.diy = True
+        device.smart_eye = True
+        device.ventilation = True
+        device.anti_cold = True
+        device.night_light = True
+        device.pmv = True
+
+        self.assertEqual(device.cosy_sleep_mode, 3)
+
+        from msmart.device.AC.command import SetStateCommand
+        cmd = SetStateCommand()
+        cmd.eco = False
+        cmd.fahrenheit = False
+        cmd.beep_on = False
+        for attr in ("power_save", "low_frequency_fan", "cosy_sleep_mode",
+                     "comfort_sleep", "diy", "smart_eye", "ventilation",
+                     "anti_cold", "night_light", "pmv"):
+            setattr(cmd, attr, getattr(device, attr))
+
+        body = cmd.tobytes()[10:-1]
+        self.assertEqual(body[8], 0x03 | 0x08 | 0x10)
+        self.assertEqual(body[9], 0x01 | 0x02 | 0x04 | 0x40)
+        self.assertEqual(body[10], 0x08 | 0x10 | 0x20)
+
+    def test_read_only_extended_features(self) -> None:
+        """Read-only extended features expose properties but no setters."""
+        device = AC(0, 0, 0)
+        for attr in ("cool_wind", "natural_wind", "child_sleep", "water_full"):
+            self.assertTrue(hasattr(device, attr))
+            # No setter -> assignment raises
+            with self.assertRaises(AttributeError):
+                setattr(device, attr, True)
+
     def test_properties_out_silent(self) -> None:
         """Test setting out silent property."""
 
@@ -644,6 +746,28 @@ class TestRefresh(unittest.IsolatedAsyncioTestCase):
 
             self.assertTrue(any(isinstance(cmd, GetStateCommand)
                             for cmd in commands))
+
+    async def test_reset_filter_commands(self) -> None:
+        """Test that filter resets send a SetStateCommand with the reset bit."""
+
+        from msmart.device.AC.command import SetStateCommand
+
+        for method, byte_idx, mask in (("reset_filter", 10, 0x80),
+                                       ("reset_fresh_air_filter", 22, 0x08)):
+            device = AC(0, 0, 0)
+            with patch("msmart.device.AC.device.AirConditioner._send_commands_get_responses", return_value=[]) as patched_method:
+                await getattr(device, method)()
+
+                patched_method.assert_awaited_once()
+                args, _ = patched_method.call_args
+                cmd = args[0]
+
+                self.assertIsInstance(cmd, SetStateCommand)
+                # A maintenance reset must not assert the timingIsValid flag
+                self.assertFalse(cmd.timer_valid)
+
+                body = cmd.tobytes()[10:-1]
+                self.assertEqual(body[byte_idx] & mask, mask)
 
     async def test_refresh_energy_usage(self) -> None:
         """Test that refresh() sends the GetEnergyUsageCommand when enabled."""
