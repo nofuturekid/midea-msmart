@@ -9,14 +9,29 @@ from msmart.const import DeviceType
 from msmart.frame import InvalidFrameException
 from msmart.utils import CapabilityManager, MideaIntEnum, deprecated
 
-from .command import (CapabilitiesResponse, Command, EnergyUsageResponse,
-                      GetCapabilitiesCommand, GetEnergyUsageCommand,
-                      GetGroupCommand, GetPropertiesCommand, GetStateCommand,
-                      Group1Response, Group2Response, Group5Response,
-                      Group7Response, Group11Response,
-                      InvalidResponseException, PropertiesResponse, PropertyId,
-                      Response, SetPropertiesCommand, SetStateCommand,
-                      StateResponse, ToggleDisplayCommand)
+from .command import (
+    CapabilitiesResponse,
+    Command,
+    EnergyUsageResponse,
+    GetCapabilitiesCommand,
+    GetEnergyUsageCommand,
+    GetGroupCommand,
+    GetPropertiesCommand,
+    GetStateCommand,
+    Group1Response,
+    Group2Response,
+    Group5Response,
+    Group7Response,
+    Group11Response,
+    InvalidResponseException,
+    PropertiesResponse,
+    PropertyId,
+    Response,
+    SetPropertiesCommand,
+    SetStateCommand,
+    StateResponse,
+    ToggleDisplayCommand,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -216,8 +231,9 @@ class AirConditioner(Device):
         self._out_silent = False
 
         # Child lock (parent control) plus its reported temp limits, preserved
-        # so toggling on/off re-sends the limits unchanged.
-        self._parent_control = False
+        # so toggling on/off re-sends the limits unchanged. None until a value is
+        # read, so consumers can tell whether the device supports it.
+        self._parent_control = None
         self._parent_control_temp_up = 0xFF
         self._parent_control_temp_down = 0xFF
 
@@ -334,28 +350,24 @@ class AirConditioner(Device):
         """Update the local state from a device state response."""
 
         if isinstance(res, StateResponse):
-            _LOGGER.debug(
-                "State response payload from device %s: %s", self.id, res)
+            _LOGGER.debug("State response payload from device %s: %s", self.id, res)
 
             self._power_state = res.power_on
 
             self._target_temperature = res.target_temperature
             self._operational_mode = cast(
                 AirConditioner.OperationalMode,
-                AirConditioner.OperationalMode.get_from_value(
-                    res.operational_mode),
+                AirConditioner.OperationalMode.get_from_value(res.operational_mode),
             )
 
             if self.supports_custom_fan_speed:
                 # Attempt to fetch enum of fan speed, but fallback to raw int if custom
                 try:
-                    self._fan_speed = AirConditioner.FanSpeed(
-                        cast(int, res.fan_speed))
+                    self._fan_speed = AirConditioner.FanSpeed(cast(int, res.fan_speed))
                 except ValueError:
                     self._fan_speed = cast(int, res.fan_speed)
             else:
-                self._fan_speed = AirConditioner.FanSpeed.get_from_value(
-                    res.fan_speed)
+                self._fan_speed = AirConditioner.FanSpeed.get_from_value(res.fan_speed)
 
             self._swing_mode = cast(
                 AirConditioner.SwingMode,
@@ -485,8 +497,7 @@ class AirConditioner(Device):
                 self._in_version = value
 
         elif isinstance(res, Group1Response):
-            _LOGGER.debug(
-                "Group 1 response payload from device %s: %s", self.id, res)
+            _LOGGER.debug("Group 1 response payload from device %s: %s", self.id, res)
 
             self._compressor_frequency = res.compressor_frequency
             self._indoor_fan_frequency = res.indoor_fan_frequency
@@ -500,14 +511,12 @@ class AirConditioner(Device):
             self._TP = res.TP
 
         elif isinstance(res, Group2Response):
-            _LOGGER.debug(
-                "Group 2 response payload from device %s: %s", self.id, res)
+            _LOGGER.debug("Group 2 response payload from device %s: %s", self.id, res)
 
             self._indoor_fan_speed = res.indoor_fan_speed
 
         elif isinstance(res, EnergyUsageResponse):
-            _LOGGER.debug(
-                "Energy response payload from device %s: %s", self.id, res)
+            _LOGGER.debug("Energy response payload from device %s: %s", self.id, res)
 
             self._total_energy_usage = {
                 AirConditioner.EnergyDataFormat.BCD: res.total_energy,
@@ -525,28 +534,24 @@ class AirConditioner(Device):
             }
 
         elif isinstance(res, Group5Response):
-            _LOGGER.debug(
-                "Group 5 response payload from device %s: %s", self.id, res)
+            _LOGGER.debug("Group 5 response payload from device %s: %s", self.id, res)
 
             self._indoor_humidity = res.humidity
             self._outdoor_fan_speed = res.outdoor_fan_speed
             self._defrost_active = res.defrost
 
         elif isinstance(res, Group7Response):
-            _LOGGER.debug(
-                "Group 7 response payload from device %s: %s", self.id, res)
+            _LOGGER.debug("Group 7 response payload from device %s: %s", self.id, res)
 
             self._outdoor_unit_power = res.outdoor_unit_power
 
         elif isinstance(res, Group11Response):
-            _LOGGER.debug(
-                "Group 11 response payload from device %s: %s", self.id, res)
+            _LOGGER.debug("Group 11 response payload from device %s: %s", self.id, res)
 
             self._louver_angle = res.louver_angle
 
         else:
-            _LOGGER.debug(
-                "Ignored unknown response from device %s: %s", self.id, res)
+            _LOGGER.debug("Ignored unknown response from device %s: %s", self.id, res)
 
     def _update_capabilities(self, res: CapabilitiesResponse) -> None:
         # Build list of supported operation modes
@@ -628,8 +633,7 @@ class AirConditioner(Device):
         # We've seen devices that claim no capability but return energy data
         self._request_energy_usage |= res.energy_stats
 
-        self._capabilities.set(
-            AirConditioner.Capability.HUMIDITY, res.humidity)
+        self._capabilities.set(AirConditioner.Capability.HUMIDITY, res.humidity)
         self._capabilities.set(
             AirConditioner.Capability.TARGET_HUMIDITY, res.target_humidity
         )
@@ -643,11 +647,9 @@ class AirConditioner(Device):
 
         self._capabilities.set(AirConditioner.Capability.CASCADE, res.cascade)
 
-        self._capabilities.set(
-            AirConditioner.Capability.FRESH_AIR, res.fresh_air)
+        self._capabilities.set(AirConditioner.Capability.FRESH_AIR, res.fresh_air)
 
-        self._capabilities.set(
-            AirConditioner.Capability.SELF_CLEAN, res.self_clean)
+        self._capabilities.set(AirConditioner.Capability.SELF_CLEAN, res.self_clean)
 
         # Add supported rate select levels
         if (rates := res.rate_select_levels) is not None:
@@ -675,15 +677,12 @@ class AirConditioner(Device):
             self._capabilities.set(
                 AirConditioner.Capability.BREEZE_AWAY, res.breeze_away
             )
-            self._capabilities.set(
-                AirConditioner.Capability.BREEZELESS, res.breezeless)
+            self._capabilities.set(AirConditioner.Capability.BREEZELESS, res.breezeless)
 
         self._capabilities.set(AirConditioner.Capability.IECO, res.ieco)
-        self._capabilities.set(
-            AirConditioner.Capability.JET_COOL, res.jet_cool)
+        self._capabilities.set(AirConditioner.Capability.JET_COOL, res.jet_cool)
 
-        self._capabilities.set(
-            AirConditioner.Capability.OUT_SILENT, res.out_silent)
+        self._capabilities.set(AirConditioner.Capability.OUT_SILENT, res.out_silent)
 
         # Update supported properties from capabilities
         self._update_supported_properties()
@@ -777,8 +776,7 @@ class AirConditioner(Device):
             cmd, CapabilitiesResponse
         )
         if response is None:
-            _LOGGER.error(
-                "Failed to query capabilities from device %s.", self.id)
+            _LOGGER.error("Failed to query capabilities from device %s.", self.id)
             return
 
         response = cast(CapabilitiesResponse, response)
@@ -795,8 +793,7 @@ class AirConditioner(Device):
                 cmd, CapabilitiesResponse
             )
             if additional_response:
-                additional_response = cast(
-                    CapabilitiesResponse, additional_response)
+                additional_response = cast(CapabilitiesResponse, additional_response)
 
                 _LOGGER.debug(
                     "Additional capabilities response payload from device %s: %s",
@@ -807,8 +804,7 @@ class AirConditioner(Device):
                 # Merge additional capabilities
                 response.merge(additional_response)
 
-                _LOGGER.debug("Merged raw capabilities: %s",
-                              response.raw_capabilities)
+                _LOGGER.debug("Merged raw capabilities: %s", response.raw_capabilities)
             else:
                 _LOGGER.warning(
                     "Failed to query additional capabilities from device %s.", self.id
@@ -821,8 +817,7 @@ class AirConditioner(Device):
         """Toggle the device display if the device supports it."""
 
         if not self.supports_display_control:
-            _LOGGER.warning(
-                "Device %s is not capable of display control.", self.id)
+            _LOGGER.warning("Device %s is not capable of display control.", self.id)
 
         # Send the command and ignore all responses
         cmd = ToggleDisplayCommand()
@@ -892,8 +887,7 @@ class AirConditioner(Device):
 
         # Warn if attempting to update a property that isn't supported
         for prop in properties.keys() - self._supported_properties:
-            _LOGGER.warning(
-                "Device %s is not capable of property %r.", self.id, prop)
+            _LOGGER.warning("Device %s is not capable of property %r.", self.id, prop)
 
         # Always add buzzer property
         properties[PropertyId.BUZZER] = self._beep_on
@@ -1002,8 +996,7 @@ class AirConditioner(Device):
             _LOGGER.warning("Device %s is not capable of eco mode.", self.id)
 
         if self._freeze_protection and not self.supports_freeze_protection:
-            _LOGGER.warning(
-                "Device %s is not capable of freeze protection.", self.id)
+            _LOGGER.warning("Device %s is not capable of freeze protection.", self.id)
 
         if (
             self._rate_select != AirConditioner.RateSelect.OFF
@@ -1019,8 +1012,7 @@ class AirConditioner(Device):
             self._aux_mode != AirConditioner.AuxHeatMode.OFF
             and self._aux_mode not in self.supported_aux_modes
         ):
-            _LOGGER.warning(
-                "Device is not capable of aux mode %r.", self._aux_mode)
+            _LOGGER.warning("Device is not capable of aux mode %r.", self._aux_mode)
 
         cmd = self._build_set_state_command()
 
